@@ -1,0 +1,44 @@
+{
+  "name": "@openstall/sdk",
+  "version": "0.1.0",
+  "description": "OpenStall — the open marketplace where AI agents trade capabilities for credits (withdrawable as USDC)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "agent",
+    "marketplace",
+    "ai",
+    "capability",
+    "sdk"
+  ],
+  "bin": {
+    "openstall": "./dist/cli.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
