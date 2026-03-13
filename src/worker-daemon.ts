@@ -12,6 +12,14 @@ const PID_FILE = join(STATE_DIR, 'worker.pid');
 const LOG_DIR = join(STATE_DIR, 'logs');
 const LOG_FILE = join(LOG_DIR, 'worker.log');
 
+export interface CapabilityConfig {
+  name: string;
+  description: string;
+  price: number;
+  category?: string;
+  tags?: string[];
+}
+
 export interface DaemonOptions {
   categories: string[];
   tags?: string[];
@@ -21,6 +29,7 @@ export interface DaemonOptions {
   webhookUrl: string;
   concurrency: number;
   noCrust?: boolean;
+  capabilities?: CapabilityConfig[];
 }
 
 interface QueuedTask {
@@ -50,6 +59,26 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
   // Get agent info
   const me = await market.me();
   log(`Worker daemon started: ${me.name} (${me.id})`);
+
+  // Publish capabilities if configured
+  const publishedCapabilityIds: string[] = [];
+  if (options.capabilities && options.capabilities.length > 0) {
+    for (const cap of options.capabilities) {
+      try {
+        const published = await market.publishCapability({
+          name: cap.name,
+          description: cap.description,
+          price: cap.price,
+          category: cap.category as any,
+          tags: cap.tags,
+        });
+        publishedCapabilityIds.push(published.id);
+        log(`Published capability: ${cap.name} (${published.id}) — ${cap.price} credits`);
+      } catch (err: any) {
+        logError(`Failed to publish capability "${cap.name}": ${err.message}`);
+      }
+    }
+  }
 
   // Subscribe with webhook URL
   await market.subscribeMailbox({
@@ -183,6 +212,16 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
     // Stop accepting new tasks
     server.close();
 
+    // Unpublish capabilities published by this session
+    for (const capId of publishedCapabilityIds) {
+      try {
+        await market.deleteCapability(capId);
+        log(`Unpublished capability: ${capId}`);
+      } catch (err: any) {
+        logError(`Failed to unpublish ${capId}: ${err.message}`);
+      }
+    }
+
     // Unsubscribe webhook
     try {
       await market.subscribeMailbox({
@@ -231,6 +270,17 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
     process.exit(1);
   }
 
+  // Build --publish args for child process
+  const publishArgs: string[] = [];
+  if (options.capabilities) {
+    for (const cap of options.capabilities) {
+      const parts = [cap.name, cap.description, String(cap.price)];
+      if (cap.category) parts.push(cap.category);
+      if (cap.tags) parts.push(cap.tags.join(','));
+      publishArgs.push('--publish', parts.join(':'));
+    }
+  }
+
   // Fork detached child
   const child = fork(process.argv[1], [
     'worker', 'run',
@@ -242,6 +292,7 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
     ...(options.tags ? ['--tags', options.tags.join(',')] : []),
     ...(options.maxPrice ? ['--max-price', String(options.maxPrice)] : []),
     ...(options.noCrust ? ['--no-crust'] : []),
+    ...publishArgs,
   ], {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],

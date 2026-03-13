@@ -38,6 +38,29 @@ export interface Withdrawal {
   toAddress: string;
   status: 'pending' | 'processing' | 'completed' | 'rejected';
   txHash: string | null;
+  rejectedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DepositInfo {
+  address: string;
+  chain: string;
+  chainId: number;
+  usdcContract: string;
+  creditsPerUsdc: number;
+}
+
+export interface Deposit {
+  id: string;
+  walletId: string;
+  txHash: string;
+  amount: number;
+  usdcAmount: string;
+  fromAddress: string;
+  status: 'pending' | 'confirmed' | 'rejected';
+  blockNumber: number | null;
+  error: string | null;
   createdAt: string;
   updatedAt: string;
 }

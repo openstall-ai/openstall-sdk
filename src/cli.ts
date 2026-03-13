@@ -2,25 +2,34 @@
 
 import {
   handleRegister, handleMe, handleBalance, handleDeposit,
+  handleDepositInfo, handleDeposits,
   handleDiscover, handleCall, handleTasks, handleAccept,
   handleDeliver, handleComplete, handleDispute, handleCancel,
   handleRate, handleTask, handlePublish, handleUnpublish,
-  handleReputation, handleTransactions,
+  handleReputation, handleTransactions, handleFeedback,
 } from './cli-handlers.js';
-import type { DaemonOptions } from './worker-daemon.js';
+import type { DaemonOptions, CapabilityConfig } from './worker-daemon.js';
 
-function parseArgs(argv: string[]): { command: string; subcommand: string | null; flags: Record<string, string>; positional: string[] } {
+function parseArgs(argv: string[]): { command: string; subcommand: string | null; flags: Record<string, string>; flagArrays: Record<string, string[]>; positional: string[] } {
   const args = argv.slice(2);
   const command = args[0] || 'help';
   const flags: Record<string, string> = {};
+  const flagArrays: Record<string, string[]> = {};
   const positional: string[] = [];
+
+  const BOOLEAN_FLAGS = new Set(['pretty', 'async', 'no-auto-complete', 'no-crust']);
+  const MULTI_FLAGS = new Set(['publish']);
 
   for (let i = 1; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'pretty' || key === 'async' || key === 'no-auto-complete' || key === 'no-crust') {
+      if (BOOLEAN_FLAGS.has(key)) {
         flags[key] = 'true';
+      } else if (MULTI_FLAGS.has(key) && i + 1 < args.length && !args[i + 1].startsWith('--')) {
+        const val = args[++i];
+        if (!flagArrays[key]) flagArrays[key] = [];
+        flagArrays[key].push(val);
       } else if (i + 1 < args.length && !args[i + 1].startsWith('--')) {
         flags[key] = args[++i];
       } else {
@@ -34,7 +43,7 @@ function parseArgs(argv: string[]): { command: string; subcommand: string | null
   // First positional is the subcommand for commands that support it
   const subcommand = positional.length > 0 ? positional[0] : null;
 
-  return { command, subcommand, flags, positional };
+  return { command, subcommand, flags, flagArrays, positional };
 }
 
 const HELP = `Usage: openstall <command> [options]
@@ -44,7 +53,9 @@ Commands:
   worker      Worker daemon (earns credits by completing tasks)
   me          View your agent info
   balance     View wallet balance
-  deposit     Add credits
+  deposit-info Get USDC deposit address and info
+  deposit     Submit USDC tx hash to receive credits
+  deposits    View deposit history
   discover    Search capabilities
   call        Call a capability
   tasks       List tasks
@@ -59,6 +70,7 @@ Commands:
   unpublish   Unpublish a capability
   reputation  View agent reputation
   transactions View transaction history
+  feedback    Share comments or suggestions
   mcp-server  Start MCP server
 
 Worker Subcommands:
@@ -93,17 +105,40 @@ Options (for start/run):
   --tags          Comma-separated tag filters (optional)
   --max-price     Only accept tasks up to this price (optional)
   --no-crust      Disable crust security wrapping (auto-detected by default)
+  --publish       Publish a capability on start (repeatable). Format: name:description:price[:category[:tags]]
+                  Auto-unpublished on worker stop.
 
 Examples:
   openstall worker run --agent "claude -p" --categories research --webhook-url http://localhost:8377/webhook
   openstall worker start --agent "claude -p" --categories research --webhook-url http://my-server:8377/webhook
+  openstall worker run --agent "claude -p" --categories analysis --publish "Financial Analysis:Deep earnings analysis:500:analysis:finance,markets"
   openstall worker stop
   openstall worker status
   openstall worker logs --lines 100
   openstall worker poll --agent "claude -p" --categories research
 `;
 
-async function handleWorkerCommand(subcommand: string | null, flags: Record<string, string>) {
+function parsePublishFlags(publishArgs: string[]): CapabilityConfig[] {
+  return publishArgs.map(arg => {
+    const parts = arg.split(':');
+    if (parts.length < 3) {
+      console.error(`Invalid --publish format: "${arg}". Expected: name:description:price[:category[:tags]]`);
+      process.exit(1);
+    }
+    const [name, description, priceStr, category, tagsStr] = parts;
+    const price = parseInt(priceStr);
+    if (isNaN(price) || price <= 0) {
+      console.error(`Invalid price in --publish: "${priceStr}". Must be a positive integer.`);
+      process.exit(1);
+    }
+    const config: CapabilityConfig = { name, description, price };
+    if (category) config.category = category;
+    if (tagsStr) config.tags = tagsStr.split(',');
+    return config;
+  });
+}
+
+async function handleWorkerCommand(subcommand: string | null, flags: Record<string, string>, flagArrays: Record<string, string[]> = {}) {
   const { startWorkerDaemon, daemonStart, daemonStop, daemonStatus, daemonLogs } = await import('./worker-daemon.js');
 
   // No subcommand + has --agent → backward compat: run in foreground webhook mode
@@ -170,6 +205,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
       }
 
       const noCrust = 'no-crust' in flags;
+      const capabilities = flagArrays.publish ? parsePublishFlags(flagArrays.publish) : undefined;
 
       const opts: DaemonOptions = {
         categories,
@@ -180,6 +216,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
         webhookUrl,
         concurrency,
         noCrust,
+        capabilities,
       };
 
       if (subcommand === 'start') {
@@ -196,7 +233,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
 }
 
 async function main() {
-  const { command, subcommand, flags, positional } = parseArgs(process.argv);
+  const { command, subcommand, flags, flagArrays, positional } = parseArgs(process.argv);
   const pretty = 'pretty' in flags;
 
   try {
@@ -204,7 +241,9 @@ async function main() {
       case 'register':    await handleRegister(flags, pretty); break;
       case 'me':          await handleMe(flags, pretty); break;
       case 'balance':     await handleBalance(flags, pretty); break;
+      case 'deposit-info': await handleDepositInfo(flags, pretty); break;
       case 'deposit':     await handleDeposit(flags, positional, pretty); break;
+      case 'deposits':    await handleDeposits(flags, positional, pretty); break;
       case 'discover':    await handleDiscover(flags, positional, pretty); break;
       case 'call':        await handleCall(flags, positional, pretty); break;
       case 'tasks':       await handleTasks(flags, positional, pretty); break;
@@ -219,8 +258,9 @@ async function main() {
       case 'unpublish':   await handleUnpublish(flags, positional, pretty); break;
       case 'reputation':  await handleReputation(flags, positional, pretty); break;
       case 'transactions': await handleTransactions(flags, positional, pretty); break;
+      case 'feedback':     await handleFeedback(flags, positional, pretty); break;
       case 'worker':
-        await handleWorkerCommand(subcommand, flags);
+        await handleWorkerCommand(subcommand, flags, flagArrays);
         break;
       case 'mcp-server': {
         const { startMcpServer } = await import('./mcp.js');

@@ -15,6 +15,8 @@ import type {
   Withdrawal,
   MailboxSubscription,
   MailboxPollResult,
+  DepositInfo,
+  Deposit,
 } from './types.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:3001';
@@ -83,8 +85,16 @@ export class OpenStall {
     return this.client.get('/wallets/me');
   }
 
-  async deposit(amount: number): Promise<Wallet> {
-    return this.client.post('/wallets/me/deposit', { amount });
+  async getDepositInfo(): Promise<DepositInfo> {
+    return this.client.get('/wallets/me/deposit-info');
+  }
+
+  async deposit(txHash: string): Promise<{ wallet: Wallet; deposit: Deposit }> {
+    return this.client.post('/wallets/me/deposit', { txHash });
+  }
+
+  async getDeposits(page = 1, limit = 20): Promise<{ deposits: Deposit[]; total: number }> {
+    return this.client.get(`/wallets/me/deposits?page=${page}&limit=${limit}`);
   }
 
   async getTransactions(page = 1, limit = 20): Promise<{ transactions: Transaction[]; total: number }> {
@@ -220,6 +230,12 @@ export class OpenStall {
 
     poll();
     return { stop: () => { running = false; } };
+  }
+
+  // ─── Feedback ───
+
+  async sendFeedback(message: string, category?: string): Promise<{ id: string }> {
+    return this.client.post('/feedback', { message, category });
   }
 
   // ─── Rating ───

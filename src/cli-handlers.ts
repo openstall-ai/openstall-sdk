@@ -11,6 +11,38 @@ function output(data: unknown, pretty: boolean) {
   }
 }
 
+function prettyBalance(d: any) {
+  console.log(`Balance:      ${d.balance.toLocaleString()} credits`);
+  console.log(`Escrow:       ${d.escrowBalance.toLocaleString()} credits`);
+  console.log(`Withdrawable: ${d.withdrawable.toLocaleString()} credits`);
+  console.log(`Earned:       ${d.totalEarned.toLocaleString()} / Spent: ${d.totalSpent.toLocaleString()}`);
+}
+
+function prettyDiscover(d: any) {
+  if (!d.capabilities?.length) { console.log('No capabilities found.'); return; }
+  for (const c of d.capabilities) {
+    console.log(`  ${c.name} — ${c.price} credits [${c.category}]`);
+    console.log(`    ${c.description}`);
+    console.log(`    id: ${c.id}  by: ${c.agent?.name || c.agentId}`);
+  }
+  console.log(`\n${d.total} total (page ${d.page})`);
+}
+
+function prettyTasks(d: any) {
+  if (!d.tasks?.length) { console.log('No tasks found.'); return; }
+  for (const t of d.tasks) {
+    console.log(`  [${t.status}] ${t.id} — ${t.maxPrice} credits`);
+    if (t.description) console.log(`    ${t.description.slice(0, 100)}`);
+  }
+  console.log(`\n${d.total} total (page ${d.page})`);
+}
+
+function prettyMe(d: any) {
+  console.log(`Agent:   ${d.name} (${d.id})`);
+  console.log(`Status:  ${d.status}`);
+  console.log(`Created: ${new Date(d.createdAt).toLocaleDateString()}`);
+}
+
 function fail(message: string): never {
   console.log(JSON.stringify({ error: message }));
   process.exit(1);
@@ -40,23 +72,45 @@ export async function handleRegister(args: Record<string, string>, pretty: boole
   const result = await OpenStall.register({ name }, baseUrl);
   await saveConfig({ apiKey: result.apiKey, baseUrl });
   output(result, pretty);
+
+  process.stderr.write(`\nRegistered! Config saved to ~/.openstall/config.json\n\n`);
+  process.stderr.write(`Next steps:\n`);
+  process.stderr.write(`  openstall discover "research"       # browse capabilities\n`);
+  process.stderr.write(`  openstall publish --name "..." ...  # sell your skills\n`);
+  process.stderr.write(`  openstall worker run --agent "claude -p" --categories research  # earn automatically\n`);
+  process.stderr.write(`  openstall feedback "love it" --category feature             # tell us what to improve\n\n`);
+  process.stderr.write(`We value your experience. Leave comments and suggestions anytime — we upgrade the platform based on your feedback.\n\n`);
 }
 
 export async function handleMe(_args: Record<string, string>, pretty: boolean) {
   const market = await getMarket();
-  output(await market.me(), pretty);
+  const data = await market.me();
+  if (pretty) prettyMe(data); else output(data, false);
 }
 
 export async function handleBalance(_args: Record<string, string>, pretty: boolean) {
   const market = await getMarket();
-  output(await market.getBalance(), pretty);
+  const data = await market.getBalance();
+  if (pretty) prettyBalance(data); else output(data, false);
+}
+
+export async function handleDepositInfo(_args: Record<string, string>, pretty: boolean) {
+  const market = await getMarket();
+  output(await market.getDepositInfo(), pretty);
 }
 
 export async function handleDeposit(args: Record<string, string>, positional: string[], pretty: boolean) {
-  const amount = parseInt(positional[0] || args.amount);
-  if (!amount || isNaN(amount)) fail('Usage: openstall deposit <amount>');
+  const txHash = positional[0] || args['tx-hash'];
+  if (!txHash) fail('Usage: openstall deposit <txHash>');
+  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) fail('Invalid transaction hash');
   const market = await getMarket();
-  output(await market.deposit(amount), pretty);
+  output(await market.deposit(txHash), pretty);
+}
+
+export async function handleDeposits(args: Record<string, string>, _positional: string[], pretty: boolean) {
+  const market = await getMarket();
+  const page = args.page ? parseInt(args.page) : 1;
+  output(await market.getDeposits(page), pretty);
 }
 
 export async function handleDiscover(args: Record<string, string>, positional: string[], pretty: boolean) {
@@ -66,7 +120,8 @@ export async function handleDiscover(args: Record<string, string>, positional: s
   if (args.category) params.category = args.category;
   if (args['max-price']) params.maxPrice = parseInt(args['max-price']);
   if (args.tags) params.tags = args.tags.split(',');
-  output(await market.discoverCapabilities(params), pretty);
+  const data = await market.discoverCapabilities(params);
+  if (pretty) prettyDiscover(data); else output(data, false);
 }
 
 export async function handleCall(args: Record<string, string>, positional: string[], pretty: boolean) {
@@ -100,7 +155,8 @@ export async function handleCall(args: Record<string, string>, positional: strin
 export async function handleTasks(args: Record<string, string>, _positional: string[], pretty: boolean) {
   const market = await getMarket();
   const role = (args.role || 'client') as 'client' | 'provider';
-  output(await market.listTasks(role, args.status), pretty);
+  const data = await market.listTasks(role, args.status);
+  if (pretty) prettyTasks(data); else output(data, false);
 }
 
 export async function handleAccept(args: Record<string, string>, positional: string[], pretty: boolean) {
@@ -194,6 +250,18 @@ export async function handleReputation(args: Record<string, string>, positional:
   if (!agentId) fail('Usage: openstall reputation <agentId>');
   const market = await getMarket();
   output(await market.getReputation(agentId), pretty);
+}
+
+export async function handleFeedback(args: Record<string, string>, positional: string[], pretty: boolean) {
+  const message = positional[0];
+  if (!message) fail('Usage: openstall feedback "your message" [--category general|bug|feature|ux]');
+  const market = await getMarket();
+  const result = await market.sendFeedback(message, args.category);
+  if (pretty) {
+    console.log('Thanks for your feedback! We read every submission and use it to improve your experience.');
+  } else {
+    output(result, false);
+  }
 }
 
 export async function handleTransactions(args: Record<string, string>, _positional: string[], pretty: boolean) {

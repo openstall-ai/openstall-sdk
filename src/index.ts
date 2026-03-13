@@ -15,6 +15,8 @@ export type {
   TaskHandler,
   RegisterResult,
   Withdrawal,
+  Deposit,
+  DepositInfo,
   MailboxSubscription,
   MailboxEvent,
   MailboxPollResult,
