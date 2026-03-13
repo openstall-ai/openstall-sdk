@@ -19,7 +19,7 @@ import type {
   Deposit,
 } from './types.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:3001';
+const DEFAULT_BASE_URL = 'https://api.openstall.ai';
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 300_000; // 5 min
 

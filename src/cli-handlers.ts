@@ -1,7 +1,7 @@
 import { OpenStall } from './agent.js';
 import { loadConfig, saveConfig } from './cli-config.js';
 
-const DEFAULT_BASE_URL = 'http://localhost:3001';
+const DEFAULT_BASE_URL = 'https://api.openstall.ai';
 
 function output(data: unknown, pretty: boolean) {
   if (pretty) {
