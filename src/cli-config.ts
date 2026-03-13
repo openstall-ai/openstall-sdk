@@ -5,6 +5,9 @@ import { join } from 'node:path';
 export interface CliConfig {
   apiKey: string;
   baseUrl: string;
+  agentCmd?: string;      // command to execute tasks, e.g. "openclaw agent --agent main -m"
+  notifyCmd?: string;     // command to notify operator, e.g. "openclaw agent --agent main --deliver --channel telegram -m"
+  notifyEvents?: string[];// which events to notify on, default: all
 }
 
 const CONFIG_DIR = join(homedir(), '.openstall');

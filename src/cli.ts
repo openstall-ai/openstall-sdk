@@ -9,6 +9,7 @@ import {
   handleReputation, handleTransactions, handleFeedback,
 } from './cli-handlers.js';
 import type { DaemonOptions, CapabilityConfig } from './worker-daemon.js';
+import { loadConfig, saveConfig } from './cli-config.js';
 
 function parseArgs(argv: string[]): { command: string; subcommand: string | null; flags: Record<string, string>; flagArrays: Record<string, string[]>; positional: string[] } {
   const args = argv.slice(2);
@@ -50,6 +51,7 @@ const HELP = `Usage: openstall <command> [options]
 
 Commands:
   register    Register a new agent
+  setup       Configure agent command and operator notifications
   worker      Worker daemon (earns credits by completing tasks)
   me          View your agent info
   balance     View wallet balance
@@ -97,7 +99,7 @@ Subcommands:
   poll      Run worker in foreground (legacy poll mode)
 
 Options (for start/run):
-  --agent         Command to run for each task (e.g. "claude -p")
+  --agent         Command to run for each task (reads from config agentCmd if not set)
   --categories    Comma-separated task categories to accept
   --port          HTTP port for webhook server (default: 8377)
   --webhook-url   Public URL for webhook callbacks (REQUIRED for webhook mode — must be reachable from the internet, NOT localhost)
@@ -105,6 +107,7 @@ Options (for start/run):
   --tags          Comma-separated tag filters (optional)
   --max-price     Only accept tasks up to this price (optional)
   --no-crust      Disable crust security wrapping (auto-detected by default)
+  --notify-cmd    Command to notify operator on task events (reads from config notifyCmd if not set)
   --publish       Publish a capability on start (repeatable). Format: name:description:price[:category[:tags]]
                   Auto-unpublished on worker stop.
 
@@ -140,6 +143,11 @@ function parsePublishFlags(publishArgs: string[]): CapabilityConfig[] {
 
 async function handleWorkerCommand(subcommand: string | null, flags: Record<string, string>, flagArrays: Record<string, string[]> = {}) {
   const { startWorkerDaemon, daemonStart, daemonStop, daemonStatus, daemonLogs } = await import('./worker-daemon.js');
+
+  // Read agentCmd and notifyCmd from config if not provided via flags
+  const config = await loadConfig();
+  if (!flags.agent && config?.agentCmd) flags.agent = config.agentCmd;
+  const notifyCmd = flags['notify-cmd'] || config?.notifyCmd;
 
   // No subcommand + has --agent → backward compat: run in foreground webhook mode
   // But if no --webhook-url, fall back to poll mode
@@ -228,6 +236,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
         concurrency,
         noCrust,
         capabilities,
+        notifyCmd,
       };
 
       if (subcommand === 'start') {
@@ -243,6 +252,54 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
   }
 }
 
+async function handleSetup(flags: Record<string, string>, positional: string[]) {
+  const config = await loadConfig();
+  if (!config) {
+    console.error('Not configured. Run: openstall register --name <name> first.');
+    process.exit(1);
+  }
+
+  const agentCmd = flags['agent-cmd'] || positional[0];
+  const notifyCmd = flags['notify-cmd'] || positional[1];
+
+  if (!agentCmd && !notifyCmd) {
+    console.log(`Usage: openstall setup --agent-cmd "..." --notify-cmd "..."
+
+Configure how the worker executes tasks and notifies your operator.
+These are saved to ~/.openstall/config.json and used by \`openstall worker\`.
+
+Options:
+  --agent-cmd    Command to execute tasks. The task prompt is appended as the last argument.
+                 Examples:
+                   "claude -p"                                    (Claude Code pipe mode)
+                   "openclaw agent --agent main -m"               (OpenClaw)
+                   "opencode -p"                                  (OpenCode)
+
+  --notify-cmd   Command to notify operator when tasks complete/fail.
+                 A human-readable message is appended as the last argument.
+                 Examples:
+                   "openclaw agent --agent main --deliver --channel telegram -m"   (Telegram via OpenClaw)
+                   "openclaw agent --agent main --deliver --channel whatsapp -m"   (WhatsApp via OpenClaw)
+                   "openclaw agent --agent main --deliver --channel slack -m"      (Slack via OpenClaw)
+
+Current config:
+  agentCmd:  ${config.agentCmd || '(not set)'}
+  notifyCmd: ${config.notifyCmd || '(not set)'}
+`);
+    return;
+  }
+
+  if (agentCmd) (config as any).agentCmd = agentCmd;
+  if (notifyCmd) (config as any).notifyCmd = notifyCmd;
+
+  await saveConfig(config as any);
+
+  console.log('Config updated:');
+  if (agentCmd) console.log(`  agentCmd:  ${agentCmd}`);
+  if (notifyCmd) console.log(`  notifyCmd: ${notifyCmd}`);
+  console.log(`\nSaved to ~/.openstall/config.json`);
+}
+
 async function main() {
   const { command, subcommand, flags, flagArrays, positional } = parseArgs(process.argv);
   const pretty = 'pretty' in flags;
@@ -250,6 +307,7 @@ async function main() {
   try {
     switch (command) {
       case 'register':    await handleRegister(flags, pretty); break;
+      case 'setup':       await handleSetup(flags, positional); break;
       case 'me':          await handleMe(flags, pretty); break;
       case 'balance':     await handleBalance(flags, pretty); break;
       case 'deposit-info': await handleDepositInfo(flags, pretty); break;

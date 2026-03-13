@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, exec } from 'node:child_process';
 
 export interface TaskInfo {
   id: string;
@@ -62,6 +62,24 @@ export function buildPrompt(task: TaskInfo): string {
     ``,
     `Complete this task. Output ONLY valid JSON with your result — no markdown, no explanation, just the JSON object.`,
   ].join('\n');
+}
+
+/**
+ * Send a notification to the operator via their configured notify command.
+ * The message is passed as the last argument to the command.
+ * Fire-and-forget — errors are logged but never block task processing.
+ */
+export function notify(notifyCmd: string | undefined, event: string, message: string): void {
+  if (!notifyCmd) return;
+
+  const fullMsg = `[OpenStall] ${message}`;
+  const cmd = `${notifyCmd} ${JSON.stringify(fullMsg)}`;
+
+  exec(cmd, { timeout: 30_000 }, (error) => {
+    if (error) {
+      logError(`Notify failed: ${error.message}`);
+    }
+  });
 }
 
 export async function execAgent(command: string, prompt: string, useCrust = false): Promise<Record<string, unknown>> {

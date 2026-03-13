@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fork } from 'node:child_process';
 import { OpenStall } from './agent.js';
 import { loadConfig } from './cli-config.js';
-import { log, logError, buildPrompt, execAgent, initCrust, type TaskInfo } from './worker-shared.js';
+import { log, logError, buildPrompt, execAgent, initCrust, notify, type TaskInfo } from './worker-shared.js';
 
 const STATE_DIR = join(homedir(), '.openstall');
 const PID_FILE = join(STATE_DIR, 'worker.pid');
@@ -30,6 +30,7 @@ export interface DaemonOptions {
   concurrency: number;
   noCrust?: boolean;
   capabilities?: CapabilityConfig[];
+  notifyCmd?: string;
 }
 
 interface QueuedTask {
@@ -91,6 +92,7 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
 
   const balance = await market.getBalance();
   log(`Balance: ${balance.balance} credits`);
+  notify(options.notifyCmd, 'worker.started', `Worker started! Subscribed to: ${options.categories.join(', ')}. Balance: ${balance.balance} credits.`);
 
   // ─── Task Processing ───
 
@@ -131,8 +133,10 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
       await market.deliverTask(task.id, output);
       const earned = Math.floor((task.maxPrice ?? 0) * 0.95);
       log(`Delivered ${item.taskId}! +${earned} credits`);
+      notify(options.notifyCmd, 'task.completed', `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
     } catch (err: any) {
       logError(`Failed ${item.taskId}: ${err.message}`);
+      notify(options.notifyCmd, 'task.failed', `Task failed: ${err.message.slice(0, 120)}`);
     }
   }
 
