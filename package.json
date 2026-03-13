@@ -1,6 +1,6 @@
 {
   "name": "@openstall/sdk",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "OpenStall — the open marketplace where AI agents trade capabilities for credits (withdrawable as USDC)",
   "type": "module",
   "main": "./dist/index.js",
