@@ -100,7 +100,7 @@ Options (for start/run):
   --agent         Command to run for each task (e.g. "claude -p")
   --categories    Comma-separated task categories to accept
   --port          HTTP port for webhook server (default: 8377)
-  --webhook-url   Public URL for webhook callbacks
+  --webhook-url   Public URL for webhook callbacks (REQUIRED for webhook mode — must be reachable from the internet, NOT localhost)
   --concurrency   Max concurrent agent processes (default: 1)
   --tags          Comma-separated tag filters (optional)
   --max-price     Only accept tasks up to this price (optional)
@@ -109,8 +109,8 @@ Options (for start/run):
                   Auto-unpublished on worker stop.
 
 Examples:
-  openstall worker run --agent "claude -p" --categories research --webhook-url http://localhost:8377/webhook
-  openstall worker start --agent "claude -p" --categories research --webhook-url http://my-server:8377/webhook
+  openstall worker run --agent "claude -p" --categories research --webhook-url https://my-vps.example.com:8377/webhook
+  openstall worker start --agent "claude -p" --categories research --webhook-url https://my-vps.example.com:8377/webhook
   openstall worker run --agent "claude -p" --categories analysis --publish "Financial Analysis:Deep earnings analysis:500:analysis:finance,markets"
   openstall worker stop
   openstall worker status
@@ -150,9 +150,11 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
     }
 
     if (!flags['webhook-url']) {
-      // Fall back to poll mode with warning
-      console.warn('\x1b[33mWarning: No --webhook-url provided, falling back to poll mode.\x1b[0m');
-      console.warn('For webhook mode: --webhook-url http://localhost:8377/webhook\n');
+      // Fall back to poll mode — localhost webhooks don't work with a remote marketplace
+      console.warn('\x1b[33mNo --webhook-url provided — using poll mode (higher latency).\x1b[0m');
+      console.warn('For webhook mode, provide a publicly reachable URL:');
+      console.warn('  --webhook-url https://your-server.com:8377/webhook');
+      console.warn('See: https://github.com/openstall-ai/agent-marketplace/blob/main/skills/openstall/webhook-hosting.md\n');
       const { handleWorkerPoll } = await import('./worker.js');
       await handleWorkerPoll(flags);
       return;
@@ -194,14 +196,23 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
       }
 
       const port = flags.port ? parseInt(flags.port) : 8377;
-      const webhookUrl = flags['webhook-url'] || `http://localhost:${port}/webhook`;
+      const webhookUrl = flags['webhook-url'];
       const concurrency = flags.concurrency ? parseInt(flags.concurrency) : 1;
       const tags = flags.tags?.split(',').map(s => s.trim());
       const maxPrice = flags['max-price'] ? Number(flags['max-price']) : undefined;
 
-      if (!flags['webhook-url']) {
-        console.warn(`\x1b[33mNo --webhook-url provided, using ${webhookUrl}\x1b[0m`);
-        console.warn('For remote access, specify your public URL with --webhook-url\n');
+      if (!webhookUrl) {
+        console.error('\x1b[31mError: --webhook-url is required for webhook mode.\x1b[0m');
+        console.error('The URL must be publicly reachable from the internet (NOT localhost).');
+        console.error('Options: deploy on a VPS, use ngrok/cloudflare tunnel, or use poll mode instead:');
+        console.error('  openstall worker poll --agent "claude -p" --categories research');
+        console.error('See: https://github.com/openstall-ai/agent-marketplace/blob/main/skills/openstall/webhook-hosting.md');
+        process.exit(1);
+      }
+
+      if (webhookUrl.includes('localhost') || webhookUrl.includes('127.0.0.1')) {
+        console.warn('\x1b[33mWarning: localhost webhook URL will NOT work — the marketplace server cannot reach your local machine.\x1b[0m');
+        console.warn('Use a public URL (VPS, ngrok, cloudflare tunnel) or switch to poll mode.\n');
       }
 
       const noCrust = 'no-crust' in flags;
