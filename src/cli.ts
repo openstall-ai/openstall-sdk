@@ -144,9 +144,10 @@ function parsePublishFlags(publishArgs: string[]): CapabilityConfig[] {
 async function handleWorkerCommand(subcommand: string | null, flags: Record<string, string>, flagArrays: Record<string, string[]> = {}) {
   const { startWorkerDaemon, daemonStart, daemonStop, daemonStatus, daemonLogs } = await import('./worker-daemon.js');
 
-  // Read agentCmd and notifyCmd from config if not provided via flags
+  // Read agentCmd and notify config from config file
   const config = await loadConfig();
   if (!flags.agent && config?.agentCmd) flags.agent = config.agentCmd;
+  const notifyConfig = (config as any)?.notify;
   const notifyCmd = flags['notify-cmd'] || config?.notifyCmd;
 
   // No subcommand + has --agent → backward compat: run in foreground webhook mode
@@ -236,6 +237,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
         concurrency,
         noCrust,
         capabilities,
+        notify: notifyConfig,
         notifyCmd,
       };
 
@@ -260,43 +262,79 @@ async function handleSetup(flags: Record<string, string>, positional: string[]) 
   }
 
   const agentCmd = flags['agent-cmd'] || positional[0];
-  const notifyCmd = flags['notify-cmd'] || positional[1];
+  const notifyCmd = flags['notify-cmd'];
 
-  if (!agentCmd && !notifyCmd) {
-    console.log(`Usage: openstall setup --agent-cmd "..." --notify-cmd "..."
+  // Built-in notification providers
+  const telegramBotToken = flags['telegram-bot-token'];
+  const telegramChatId = flags['telegram-chat-id'];
+  const slackWebhookUrl = flags['slack-webhook-url'];
+  const discordWebhookUrl = flags['discord-webhook-url'];
+  const webhookUrl = flags['notify-webhook-url'];
+
+  const hasNotifyProvider = telegramBotToken || slackWebhookUrl || discordWebhookUrl || webhookUrl;
+
+  if (!agentCmd && !notifyCmd && !hasNotifyProvider) {
+    const currentNotify = (config as any).notify;
+    const notifyStatus = currentNotify
+      ? `${currentNotify.provider}${currentNotify.provider === 'telegram' ? ` (chat: ${currentNotify.chatId})` : ''}`
+      : (config as any).notifyCmd || '(not set)';
+
+    console.log(`Usage: openstall setup [options]
 
 Configure how the worker executes tasks and notifies your operator.
-These are saved to ~/.openstall/config.json and used by \`openstall worker\`.
+Saved to ~/.openstall/config.json and used by \`openstall worker\`.
 
 Options:
-  --agent-cmd    Command to execute tasks. The task prompt is appended as the last argument.
-                 Examples:
-                   "claude -p"                                    (Claude Code pipe mode)
-                   "openclaw agent --agent main -m"               (OpenClaw)
-                   "opencode -p"                                  (OpenCode)
+  --agent-cmd              Command to execute tasks (prompt appended as last arg)
+                           Examples: "claude -p", "openclaw agent --agent main -m"
 
-  --notify-cmd   Command to notify operator when tasks complete/fail.
-                 A human-readable message is appended as the last argument.
-                 Examples:
-                   "openclaw agent --agent main --deliver --channel telegram -m"   (Telegram via OpenClaw)
-                   "openclaw agent --agent main --deliver --channel whatsapp -m"   (WhatsApp via OpenClaw)
-                   "openclaw agent --agent main --deliver --channel slack -m"      (Slack via OpenClaw)
+  Notifications (pick one):
+  --telegram-bot-token T --telegram-chat-id C   Notify via Telegram Bot API
+  --slack-webhook-url URL                       Notify via Slack incoming webhook
+  --discord-webhook-url URL                     Notify via Discord webhook
+  --notify-webhook-url URL                      Notify via generic webhook (POST)
+  --notify-cmd CMD                              Legacy: shell command (msg appended as last arg)
 
 Current config:
   agentCmd:  ${config.agentCmd || '(not set)'}
-  notifyCmd: ${config.notifyCmd || '(not set)'}
+  notify:    ${notifyStatus}
 `);
     return;
   }
 
   if (agentCmd) (config as any).agentCmd = agentCmd;
-  if (notifyCmd) (config as any).notifyCmd = notifyCmd;
+
+  // Set up notification provider
+  if (telegramBotToken && telegramChatId) {
+    (config as any).notify = { provider: 'telegram', botToken: telegramBotToken, chatId: telegramChatId };
+    delete (config as any).notifyCmd;
+  } else if (telegramBotToken || telegramChatId) {
+    console.error('Telegram requires both --telegram-bot-token and --telegram-chat-id');
+    process.exit(1);
+  } else if (slackWebhookUrl) {
+    (config as any).notify = { provider: 'slack', webhookUrl: slackWebhookUrl };
+    delete (config as any).notifyCmd;
+  } else if (discordWebhookUrl) {
+    (config as any).notify = { provider: 'discord', webhookUrl: discordWebhookUrl };
+    delete (config as any).notifyCmd;
+  } else if (webhookUrl) {
+    (config as any).notify = { provider: 'webhook', webhookUrl };
+    delete (config as any).notifyCmd;
+  } else if (notifyCmd) {
+    (config as any).notifyCmd = notifyCmd;
+    delete (config as any).notify;
+  }
 
   await saveConfig(config as any);
 
   console.log('Config updated:');
   if (agentCmd) console.log(`  agentCmd:  ${agentCmd}`);
-  if (notifyCmd) console.log(`  notifyCmd: ${notifyCmd}`);
+  const n = (config as any).notify;
+  if (n) {
+    console.log(`  notify:    ${n.provider}${n.provider === 'telegram' ? ` (chat: ${n.chatId})` : ` (${n.webhookUrl})`}`);
+  } else if ((config as any).notifyCmd) {
+    console.log(`  notifyCmd: ${(config as any).notifyCmd}`);
+  }
   console.log(`\nSaved to ~/.openstall/config.json`);
 }
 

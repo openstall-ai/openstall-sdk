@@ -1,4 +1,6 @@
 import { execFile, exec } from 'node:child_process';
+import { request } from 'node:https';
+import type { NotifyConfig } from './cli-config.js';
 
 export interface TaskInfo {
   id: string;
@@ -65,21 +67,88 @@ export function buildPrompt(task: TaskInfo): string {
 }
 
 /**
- * Send a notification to the operator via their configured notify command.
- * The message is passed as the last argument to the command.
+ * Send a notification to the operator.
+ * Supports built-in providers (Telegram, Slack, Discord, webhook) or legacy shell command.
  * Fire-and-forget — errors are logged but never block task processing.
  */
-export function notify(notifyCmd: string | undefined, event: string, message: string): void {
-  if (!notifyCmd) return;
+export function notify(config: NotifyConfig | string | undefined, event: string, message: string): void {
+  if (!config) return;
 
   const fullMsg = `[OpenStall] ${message}`;
-  const cmd = `${notifyCmd} ${JSON.stringify(fullMsg)}`;
 
-  exec(cmd, { timeout: 30_000 }, (error) => {
-    if (error) {
-      logError(`Notify failed: ${error.message}`);
+  // Legacy: string = shell command
+  if (typeof config === 'string') {
+    const cmd = `${config} ${JSON.stringify(fullMsg)}`;
+    exec(cmd, { timeout: 30_000 }, (error) => {
+      if (error) logError(`Notify failed: ${error.message}`);
+    });
+    return;
+  }
+
+  // Built-in providers
+  switch (config.provider) {
+    case 'telegram':
+      notifyTelegram(config, fullMsg);
+      break;
+    case 'slack':
+      notifyWebhook(config.webhookUrl!, JSON.stringify({ text: fullMsg }));
+      break;
+    case 'discord':
+      notifyWebhook(config.webhookUrl!, JSON.stringify({ content: fullMsg }));
+      break;
+    case 'webhook':
+      notifyWebhook(config.webhookUrl!, JSON.stringify({ event, message: fullMsg, timestamp: new Date().toISOString() }));
+      break;
+    default:
+      logError(`Unknown notify provider: ${(config as any).provider}`);
+  }
+}
+
+function notifyTelegram(config: NotifyConfig, text: string): void {
+  if (!config.botToken || !config.chatId) {
+    logError('Telegram notify: missing botToken or chatId');
+    return;
+  }
+  const body = JSON.stringify({ chat_id: config.chatId, text });
+  const url = new URL(`https://api.telegram.org/bot${config.botToken}/sendMessage`);
+  const req = request({
+    hostname: url.hostname,
+    path: url.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    timeout: 10_000,
+  }, (res) => {
+    if (res.statusCode && res.statusCode >= 400) {
+      logError(`Telegram notify failed: HTTP ${res.statusCode}`);
     }
+    res.resume(); // drain
   });
+  req.on('error', (err) => logError(`Telegram notify error: ${err.message}`));
+  req.end(body);
+}
+
+function notifyWebhook(url: string, body: string): void {
+  if (!url) {
+    logError('Webhook notify: missing URL');
+    return;
+  }
+  const parsed = new URL(url);
+  const mod = parsed.protocol === 'https:' ? require('node:https') : require('node:http');
+  const req = mod.request({
+    hostname: parsed.hostname,
+    port: parsed.port,
+    path: parsed.pathname + parsed.search,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    timeout: 10_000,
+  }, (res: any) => {
+    if (res.statusCode && res.statusCode >= 400) {
+      logError(`Webhook notify failed: HTTP ${res.statusCode}`);
+    }
+    res.resume();
+  });
+  req.on('error', (err: Error) => logError(`Webhook notify error: ${err.message}`));
+  req.end(body);
 }
 
 export async function execAgent(command: string, prompt: string, useCrust = false): Promise<Record<string, unknown>> {

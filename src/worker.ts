@@ -1,5 +1,5 @@
 import { OpenStall } from './agent.js';
-import { loadConfig } from './cli-config.js';
+import { loadConfig, type NotifyConfig } from './cli-config.js';
 import { log, logError, buildPrompt, execAgent, initCrust, notify, type TaskInfo } from './worker-shared.js';
 
 interface WorkerOptions {
@@ -11,6 +11,7 @@ interface WorkerOptions {
   pollIntervalMs?: number;
   noCrust?: boolean;
   notifyCmd?: string;
+  notify?: NotifyConfig;
 }
 
 const DEFAULT_POLL_INTERVAL = 3000;
@@ -97,10 +98,10 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
             await market.deliverTask(task.id, output);
             const earned = Math.floor((task.maxPrice ?? 0) * 0.95);
             log(`  Delivered! +${earned} credits`);
-            notify(options.notifyCmd, 'task.completed', `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
+            notify(options.notify ?? options.notifyCmd, 'task.completed', `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
           } catch (err: any) {
             logError(`  Failed: ${err.message}`);
-            notify(options.notifyCmd, 'task.failed', `Task failed: ${err.message.slice(0, 120)}`);
+            notify(options.notify ?? options.notifyCmd, 'task.failed', `Task failed: ${err.message.slice(0, 120)}`);
           }
         }
 
@@ -160,19 +161,19 @@ The worker polls for matching tasks and runs your agent for each one.`);
   const maxPrice = flags['max-price'] ? Number(flags['max-price']) : undefined;
   const noCrust = 'no-crust' in flags;
 
-  // Read notifyCmd from config if not provided via --notify-cmd
-  let notifyCmd = flags['notify-cmd'];
-  if (!notifyCmd) {
-    const { loadConfig: lc } = await import('./cli-config.js');
-    const cfg = await lc();
-    if (cfg?.notifyCmd) notifyCmd = cfg.notifyCmd;
-  }
+  // Read notify config from config file
+  const { loadConfig: lc } = await import('./cli-config.js');
+  const cfg = await lc();
+  const notifyConfig = cfg?.notify;
+  const notifyCmd = flags['notify-cmd'] || cfg?.notifyCmd;
+
   const { stop } = await startWorker({
     categories,
     tags,
     maxPrice,
     agentCommand: agent,
     noCrust,
+    notify: notifyConfig,
     notifyCmd,
   });
 

@@ -2,12 +2,20 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+export interface NotifyConfig {
+  provider: 'telegram' | 'slack' | 'discord' | 'webhook';
+  botToken?: string;    // Telegram bot token
+  chatId?: string;      // Telegram chat ID
+  webhookUrl?: string;  // Slack, Discord, or generic webhook URL
+}
+
 export interface CliConfig {
   apiKey: string;
   baseUrl: string;
   agentCmd?: string;      // command to execute tasks, e.g. "openclaw agent --agent main -m"
-  notifyCmd?: string;     // command to notify operator, e.g. "openclaw agent --agent main --deliver --channel telegram -m"
-  notifyEvents?: string[];// which events to notify on, default: all
+  notify?: NotifyConfig;  // built-in notification provider
+  notifyCmd?: string;     // DEPRECATED: shell command fallback
+  notifyEvents?: string[];
 }
 
 const CONFIG_DIR = join(homedir(), '.openstall');
