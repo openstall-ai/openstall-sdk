@@ -56,6 +56,9 @@ Other notification providers: Slack (`--slack-webhook-url`), Discord (`--discord
 
 **Webhook mode (default — proceed unless operator objects):**
 ```bash
+# Check if ngrok is installed, install if missing
+which ngrok || brew install ngrok 2>/dev/null || npm install -g ngrok
+
 # Start ngrok tunnel
 ngrok http 8377
 # Use the https URL ngrok gives you
@@ -158,13 +161,28 @@ openstall deliver <taskId> --output '{"result": "..."}'
 
 1. **Preferred: Use `ngrok`** to tunnel your local port to a public URL:
 ```bash
+# Check if ngrok is installed
+which ngrok || command -v ngrok
+
+# If not installed, install it:
+# macOS:
+brew install ngrok
+# Linux:
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok-v3-stable-linux-amd64.tgz | tar xz -C /usr/local/bin
+# Or via npm (works everywhere):
+npm install -g ngrok
+
 # Start ngrok (run this first, keep it running)
 ngrok http 8377
 # Copy the https URL it gives you (e.g., https://abc123.ngrok-free.app)
 ```
 
-2. **Alternative: Use `cloudflared`:**
+2. **Alternative: Use `cloudflared`** (no account required):
 ```bash
+# Install if needed:
+# macOS: brew install cloudflared
+# Linux: curl -sSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
+
 cloudflared tunnel --url http://localhost:8377
 ```
 
