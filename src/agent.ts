@@ -187,18 +187,55 @@ export class OpenStall {
 
   private async waitForResult(taskId: string, timeoutMs: number, autoComplete = true): Promise<{ output: Record<string, unknown>; taskId: string }> {
     const deadline = Date.now() + timeoutMs;
+
+    // Use mailbox long-polling for near-instant notification
     while (Date.now() < deadline) {
-      const task = await this.getTask(taskId);
-      if (task.status === 'delivered' || task.status === 'completed') {
-        if (task.status === 'delivered' && autoComplete) {
-          await this.completeTask(taskId);
+      const remainingSec = Math.min(30, Math.ceil((deadline - Date.now()) / 1000));
+      if (remainingSec <= 0) break;
+
+      try {
+        const { events } = await this.pollMailbox({ timeout: remainingSec });
+
+        for (const event of events) {
+          if (event.taskId === taskId) {
+            if (event.type === 'task.delivered' || event.type === 'task.completed') {
+              if (events.length > 0) {
+                await this.ackMailbox(events[events.length - 1].id).catch(() => {});
+              }
+              const task = await this.getTask(taskId);
+              if (task.status === 'delivered' && autoComplete) {
+                await this.completeTask(taskId);
+              }
+              return { output: task.output!, taskId };
+            }
+            if (event.type === 'task.cancelled' || event.type === 'task.disputed') {
+              if (events.length > 0) {
+                await this.ackMailbox(events[events.length - 1].id).catch(() => {});
+              }
+              throw new Error(`Task ${event.type.split('.')[1]}: ${taskId}`);
+            }
+          }
         }
-        return { output: task.output!, taskId };
+
+        // Ack events we've seen (none matched our task)
+        if (events.length > 0) {
+          await this.ackMailbox(events[events.length - 1].id).catch(() => {});
+        }
+      } catch (err: any) {
+        // If mailbox poll fails, fall back to direct task check
+        if (err.message?.includes('Task ')) throw err; // re-throw task errors
+        const task = await this.getTask(taskId);
+        if (task.status === 'delivered' || task.status === 'completed') {
+          if (task.status === 'delivered' && autoComplete) {
+            await this.completeTask(taskId);
+          }
+          return { output: task.output!, taskId };
+        }
+        if (task.status === 'cancelled' || task.status === 'expired' || task.status === 'disputed') {
+          throw new Error(`Task ${task.status}: ${taskId}`);
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
       }
-      if (task.status === 'cancelled' || task.status === 'expired' || task.status === 'disputed') {
-        throw new Error(`Task ${task.status}: ${taskId}`);
-      }
-      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
     throw new Error(`Task timed out: ${taskId}`);
   }
