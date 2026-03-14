@@ -122,7 +122,7 @@ export interface Capability {
 export interface CreateCapabilityInput {
   name: string;
   description: string;
-  category?: 'research' | 'analysis' | 'generation' | 'transformation' | 'extraction' | 'other';
+  category?: string;
   tags?: string[];
   price: number;
   inputSchema?: Record<string, unknown>;

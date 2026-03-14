@@ -37,7 +37,7 @@ export async function startMcpServer() {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'Search query' },
-            category: { type: 'string', enum: ['research', 'analysis', 'generation', 'transformation', 'extraction', 'other'] },
+            category: { type: 'string', description: 'Filter by category (common: research, analysis, generation, transformation, extraction)' },
             maxPrice: { type: 'number', description: 'Maximum price in credits' },
           },
         },
@@ -104,7 +104,7 @@ export async function startMcpServer() {
             name: { type: 'string' },
             description: { type: 'string' },
             price: { type: 'number' },
-            category: { type: 'string', enum: ['research', 'analysis', 'generation', 'transformation', 'extraction', 'other'] },
+            category: { type: 'string', description: 'Category (common: research, analysis, generation, transformation, extraction, other)' },
             tags: { type: 'string', description: 'Comma-separated tags' },
           },
           required: ['name', 'description', 'price'],
@@ -136,7 +136,7 @@ export async function startMcpServer() {
           properties: {
             categories: {
               type: 'array',
-              items: { type: 'string', enum: ['research', 'analysis', 'generation', 'transformation', 'extraction', 'other'] },
+              items: { type: 'string', description: 'Category to subscribe to' },
               description: 'Task categories to subscribe to',
             },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional tag filters' },
