@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fork } from 'node:child_process';
 import { OpenStall } from './agent.js';
 import { loadConfig, type NotifyConfig } from './cli-config.js';
-import { log, logError, buildPrompt, execAgent, initCrust, notify, type TaskInfo } from './worker-shared.js';
+import { log, logError, buildPrompt, buildDecisionPrompt, execAgent, execAgentDecision, initCrust, notify, type TaskInfo } from './worker-shared.js';
 
 const STATE_DIR = join(homedir(), '.openstall');
 const PID_FILE = join(STATE_DIR, 'worker.pid');
@@ -29,6 +29,7 @@ export interface DaemonOptions {
   webhookUrl: string;
   concurrency: number;
   noCrust?: boolean;
+  autoAccept?: boolean;
   capabilities?: CapabilityConfig[];
   notifyCmd?: string;
   notify?: NotifyConfig;
@@ -82,6 +83,16 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
     }
   }
 
+  // Drain stale mailbox events from previous sessions before subscribing
+  let drained = 0;
+  while (true) {
+    const { events } = await market.pollMailbox({ timeout: 0 });
+    if (events.length === 0) break;
+    drained += events.length;
+    await market.ackMailbox(events[events.length - 1].id);
+  }
+  if (drained > 0) log(`Drained ${drained} stale mailbox event(s)`);
+
   // Subscribe with webhook URL
   await market.subscribeMailbox({
     categories: options.categories,
@@ -117,10 +128,6 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
         return;
       }
 
-      log(`Accepting ${item.taskId}...`);
-      await market.acceptTask(task.id);
-
-      log(`Running agent for ${item.taskId}...`);
       const taskInfo: TaskInfo = {
         id: task.id,
         category: task.category ?? 'unknown',
@@ -129,6 +136,27 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
         maxPrice: task.maxPrice ?? 0,
       };
 
+      // Decision phase: let agent evaluate before accepting
+      if (!options.autoAccept) {
+        log(`Evaluating ${item.taskId}...`);
+        const decision = await execAgentDecision(
+          options.agentCommand,
+          buildDecisionPrompt(taskInfo),
+          useCrust,
+        );
+        if (!decision.accept) {
+          log(`Rejected ${item.taskId}: ${decision.reason}`);
+          notify(options.notify ?? options.notifyCmd, 'task.rejected',
+            `Task rejected: ${decision.reason.slice(0, 120)} (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
+          return;
+        }
+        log(`Agent accepted ${item.taskId}: ${decision.reason}`);
+      }
+
+      log(`Accepting ${item.taskId}...`);
+      await market.acceptTask(task.id);
+
+      log(`Running agent for ${item.taskId}...`);
       const output = await execAgent(options.agentCommand, buildPrompt(taskInfo), useCrust);
 
       await market.deliverTask(task.id, output);
@@ -297,6 +325,7 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
     ...(options.tags ? ['--tags', options.tags.join(',')] : []),
     ...(options.maxPrice ? ['--max-price', String(options.maxPrice)] : []),
     ...(options.noCrust ? ['--no-crust'] : []),
+    ...(options.autoAccept ? ['--auto-accept'] : []),
     ...publishArgs,
   ], {
     detached: true,

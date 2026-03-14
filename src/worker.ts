@@ -1,6 +1,6 @@
 import { OpenStall } from './agent.js';
 import { loadConfig, type NotifyConfig } from './cli-config.js';
-import { log, logError, buildPrompt, execAgent, initCrust, notify, type TaskInfo } from './worker-shared.js';
+import { log, logError, buildPrompt, buildDecisionPrompt, execAgent, execAgentDecision, initCrust, notify, type TaskInfo } from './worker-shared.js';
 
 interface WorkerOptions {
   categories: string[];
@@ -10,6 +10,7 @@ interface WorkerOptions {
   agentCommand?: string;
   pollIntervalMs?: number;
   noCrust?: boolean;
+  autoAccept?: boolean;
   notifyCmd?: string;
   notify?: NotifyConfig;
 }
@@ -62,6 +63,16 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
   const balance = await market.getBalance();
   log(`Balance: ${balance.balance} credits (earned: ${balance.totalEarned}, withdrawable: ${balance.withdrawable})`);
 
+  // Drain stale mailbox events from previous sessions
+  let drained = 0;
+  while (true) {
+    const { events } = await market.pollMailbox({ timeout: 0 });
+    if (events.length === 0) break;
+    drained += events.length;
+    await market.ackMailbox(events[events.length - 1].id);
+  }
+  if (drained > 0) log(`Drained ${drained} stale mailbox event(s)`);
+
   // Main loop
   const poll = async () => {
     while (running) {
@@ -83,17 +94,36 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
               continue;
             }
 
-            log(`  Accepting...`);
-            await market.acceptTask(task.id);
-
-            log(`  Running agent...`);
-            const output = await handler({
+            const taskInfo: TaskInfo = {
               id: task.id,
               category: task.category ?? 'unknown',
               description: task.description ?? '',
               input: task.input,
               maxPrice: task.maxPrice ?? 0,
-            });
+            };
+
+            // Decision phase: let agent evaluate before accepting
+            if (!options.autoAccept && options.agentCommand) {
+              log(`  Evaluating...`);
+              const decision = await execAgentDecision(
+                options.agentCommand,
+                buildDecisionPrompt(taskInfo),
+                useCrust,
+              );
+              if (!decision.accept) {
+                log(`  Rejected: ${decision.reason}`);
+                notify(options.notify ?? options.notifyCmd, 'task.rejected',
+                  `Task rejected: ${decision.reason.slice(0, 120)} (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
+                continue;
+              }
+              log(`  Agent accepted: ${decision.reason}`);
+            }
+
+            log(`  Accepting...`);
+            await market.acceptTask(task.id);
+
+            log(`  Running agent...`);
+            const output = await handler(taskInfo);
 
             await market.deliverTask(task.id, output);
             const earned = Math.floor((task.maxPrice ?? 0) * 0.95);
@@ -160,6 +190,7 @@ The worker polls for matching tasks and runs your agent for each one.`);
   const tags = flags.tags?.split(',').map(s => s.trim());
   const maxPrice = flags['max-price'] ? Number(flags['max-price']) : undefined;
   const noCrust = 'no-crust' in flags;
+  const autoAccept = 'auto-accept' in flags;
 
   // Read notify config from config file
   const { loadConfig: lc } = await import('./cli-config.js');
@@ -173,6 +204,7 @@ The worker polls for matching tasks and runs your agent for each one.`);
     maxPrice,
     agentCommand: agent,
     noCrust,
+    autoAccept,
     notify: notifyConfig,
     notifyCmd,
   });

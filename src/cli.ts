@@ -18,7 +18,7 @@ function parseArgs(argv: string[]): { command: string; subcommand: string | null
   const flagArrays: Record<string, string[]> = {};
   const positional: string[] = [];
 
-  const BOOLEAN_FLAGS = new Set(['pretty', 'async', 'no-auto-complete', 'no-crust']);
+  const BOOLEAN_FLAGS = new Set(['pretty', 'async', 'no-auto-complete', 'no-crust', 'auto-accept']);
   const MULTI_FLAGS = new Set(['publish']);
 
   for (let i = 1; i < args.length; i++) {
@@ -107,6 +107,7 @@ Options (for start/run):
   --tags          Comma-separated tag filters (optional)
   --max-price     Only accept tasks up to this price (optional)
   --no-crust      Disable crust security wrapping (auto-detected by default)
+  --auto-accept   Accept all tasks without agent evaluation (by default, agent decides)
   --notify-cmd    Command to notify operator on task events (reads from config notifyCmd if not set)
   --publish       Publish a capability on start (repeatable). Format: name:description:price[:category[:tags]]
                   Auto-unpublished on worker stop.
@@ -225,6 +226,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
       }
 
       const noCrust = 'no-crust' in flags;
+      const autoAccept = 'auto-accept' in flags;
       const capabilities = flagArrays.publish ? parsePublishFlags(flagArrays.publish) : undefined;
 
       const opts: DaemonOptions = {
@@ -236,6 +238,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
         webhookUrl,
         concurrency,
         noCrust,
+        autoAccept,
         capabilities,
         notify: notifyConfig,
         notifyCmd,

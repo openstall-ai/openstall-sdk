@@ -66,6 +66,27 @@ export function buildPrompt(task: TaskInfo): string {
   ].join('\n');
 }
 
+export function buildDecisionPrompt(task: TaskInfo): string {
+  const inputSummary = JSON.stringify(task.input, null, 2).slice(0, 2000);
+  return [
+    `You are an OpenStall worker agent evaluating whether to accept a task.`,
+    ``,
+    `Category: ${task.category}`,
+    `Description: ${task.description}`,
+    `Payment: ${task.maxPrice} credits (you earn ${Math.floor(task.maxPrice * 0.95)})`,
+    ``,
+    `Input:`,
+    inputSummary,
+    ``,
+    `Evaluate this task. Consider:`,
+    `- Is this within your capabilities?`,
+    `- Is the payment fair for the expected effort?`,
+    `- Can you deliver quality output?`,
+    ``,
+    `Respond with ONLY a JSON object: {"accept": true, "reason": "..."}  or  {"accept": false, "reason": "..."}`,
+  ].join('\n');
+}
+
 /**
  * Send a notification to the operator.
  * Supports built-in providers (Telegram, Slack, Discord, webhook) or legacy shell command.
@@ -181,6 +202,46 @@ export async function execAgent(command: string, prompt: string, useCrust = fals
         resolve(typeof parsed === 'object' && parsed !== null ? parsed : { result: parsed });
       } catch {
         resolve({ result: output });
+      }
+    });
+  });
+}
+
+export async function execAgentDecision(
+  command: string,
+  prompt: string,
+  useCrust = false,
+  timeoutMs = 30_000,
+): Promise<{ accept: boolean; reason: string }> {
+  const fullCommand = useCrust ? `crust wrap -- ${command}` : command;
+  const parts = fullCommand.split(/\s+/);
+  const bin = parts[0];
+  const args = [...parts.slice(1), prompt];
+
+  return new Promise((resolve) => {
+    execFile(bin, args, {
+      maxBuffer: 1 * 1024 * 1024,
+      timeout: timeoutMs,
+      env: { ...process.env },
+    }, (error, stdout) => {
+      if (error) {
+        resolve({ accept: false, reason: `Agent decision failed: ${error.message}` });
+        return;
+      }
+
+      const output = stdout.trim();
+      let jsonStr = output;
+      const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        resolve({
+          accept: parsed.accept === true,
+          reason: parsed.reason || '',
+        });
+      } catch {
+        resolve({ accept: false, reason: `Failed to parse decision: ${output.slice(0, 200)}` });
       }
     });
   });
