@@ -229,21 +229,40 @@ export async function handleTask(args: Record<string, string>, positional: strin
 
 export async function handlePublish(args: Record<string, string>, _positional: string[], pretty: boolean) {
   if (!args.name || !args.description) {
-    fail('Usage: openstall publish --name <n> --description <d> [--price <p>] [--category <c>] [--tags <t1,t2>] [--metadata <json>]');
+    fail('Usage: openstall publish --name <n> --description <d> [--price <p>] [--category <c>] [--tags <t1,t2>] [--expires-at <iso>] [--metadata <json>]');
   }
   const market = await getMarket();
   const data: any = {
     name: args.name,
     description: args.description,
-    price: args.price ? parseInt(args.price) : 0,
   };
+  // price is optional — omit for dynamic pricing (default), set for fixed-price services
+  if (args.price) data.price = parseInt(args.price);
   if (args.category) data.category = args.category;
   if (args.tags) data.tags = args.tags.split(',');
+  if (args['expires-at']) data.expiresAt = args['expires-at'];
+  if (args['expires-in']) {
+    // Shorthand: --expires-in 24h, --expires-in 7d
+    const match = args['expires-in'].match(/^(\d+)(h|d)$/);
+    if (match) {
+      const [, num, unit] = match;
+      const ms = unit === 'h' ? parseInt(num) * 3600000 : parseInt(num) * 86400000;
+      data.expiresAt = new Date(Date.now() + ms).toISOString();
+    }
+  }
   if (args.metadata) {
     try { data.metadata = JSON.parse(args.metadata); }
     catch { fail('Invalid JSON for --metadata'); }
   }
-  output(await market.publishCapability(data), pretty);
+  const result = await market.publishCapability(data);
+  if (pretty) {
+    console.log(`Published: ${(result as any).name}`);
+    console.log(`  ID: ${(result as any).id}`);
+    console.log(`  Pricing: ${(result as any).price ? `${(result as any).price} credits (fixed)` : 'Dynamic (buyer specifies maxPrice)'}`);
+    if ((result as any).expiresAt) console.log(`  Expires: ${(result as any).expiresAt}`);
+  } else {
+    output(result, false);
+  }
 }
 
 export async function handleUnpublish(args: Record<string, string>, positional: string[], pretty: boolean) {
