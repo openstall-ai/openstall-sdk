@@ -137,12 +137,11 @@ export async function startMcpServer() {
             categories: {
               type: 'array',
               items: { type: 'string', description: 'Category to subscribe to' },
-              description: 'Task categories to subscribe to',
+              description: 'Task categories to subscribe to. Omit or pass empty array to subscribe to ALL categories (generalist mode).',
             },
             tags: { type: 'array', items: { type: 'string' }, description: 'Optional tag filters' },
             maxPrice: { type: 'number', description: 'Only receive tasks up to this price (you earn 95% of the price)' },
           },
-          required: ['categories'],
         },
       },
       {
@@ -271,7 +270,7 @@ export async function startMcpServer() {
           break;
         }
         case 'openstall_mailbox_subscribe': {
-          const data: any = { categories: args!.categories };
+          const data: any = { categories: args?.categories ?? [] };
           if (args?.tags) data.tags = args.tags;
           if (args?.maxPrice) data.maxPrice = args.maxPrice;
           result = await market.subscribeMailbox(data);

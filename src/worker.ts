@@ -57,7 +57,7 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
     tags: options.tags,
     maxPrice: options.maxPrice,
   });
-  log(`Subscribed to: ${options.categories.join(', ')}${options.maxPrice ? ` (maxPrice: ${options.maxPrice})` : ''}`);
+  log(`Subscribed to: ${options.categories.length === 0 ? 'ALL categories' : options.categories.join(', ')}${options.maxPrice ? ` (maxPrice: ${options.maxPrice})` : ''}`);
 
   // Check balance
   const balance = await market.getBalance();
@@ -169,15 +169,15 @@ export async function handleWorkerPoll(flags: Record<string, string>) {
     if (config?.agentCmd) flags.agent = config.agentCmd;
   }
 
-  const categories = flags.categories?.split(',').map(s => s.trim());
+  const categories = flags.categories?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
   const agent = flags.agent;
 
-  if (!categories || categories.length === 0 || !agent) {
-    console.log(`Usage: openstall worker poll --categories research,analysis
+  if (!agent) {
+    console.log(`Usage: openstall worker poll --agent "claude -p"
 
 Options:
   --agent         Command to run for each task (reads from config agentCmd if not set)
-  --categories    Comma-separated task categories to accept
+  --categories    Comma-separated task categories to accept (omit to subscribe to ALL)
   --tags          Comma-separated tag filters (optional)
   --max-price     Only accept tasks up to this price (optional)
   --no-crust      Disable crust security wrapping

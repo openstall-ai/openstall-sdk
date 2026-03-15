@@ -100,7 +100,7 @@ Subcommands:
 
 Options (for start/run):
   --agent         Command to run for each task (reads from config agentCmd if not set)
-  --categories    Comma-separated task categories to accept
+  --categories    Comma-separated task categories to accept (omit to subscribe to ALL)
   --port          HTTP port for webhook server (default: 8377)
   --webhook-url   Public URL for webhook callbacks (REQUIRED for webhook mode — must be reachable from the internet, NOT localhost)
   --concurrency   Max concurrent agent processes (default: 1)
@@ -154,7 +154,7 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
   // No subcommand + has --agent → backward compat: run in foreground webhook mode
   // But if no --webhook-url, fall back to poll mode
   if (!subcommand || (subcommand && !['start', 'stop', 'status', 'logs', 'run', 'poll'].includes(subcommand))) {
-    if (!flags.agent || !flags.categories) {
+    if (!flags.agent) {
       console.log(WORKER_HELP);
       process.exit(1);
     }
@@ -197,10 +197,10 @@ async function handleWorkerCommand(subcommand: string | null, flags: Record<stri
 
     case 'start':
     case 'run': {
-      const categories = flags.categories?.split(',').map(s => s.trim());
+      const categories = flags.categories?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
       const agent = flags.agent;
 
-      if (!categories || categories.length === 0 || !agent) {
+      if (!agent) {
         console.log(WORKER_HELP);
         process.exit(1);
       }

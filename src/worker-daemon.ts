@@ -100,11 +100,11 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
     maxPrice: options.maxPrice,
     webhookUrl: options.webhookUrl,
   });
-  log(`Subscribed to: ${options.categories.join(', ')} — webhook: ${options.webhookUrl}`);
+  log(`Subscribed to: ${options.categories.length === 0 ? 'ALL categories' : options.categories.join(', ')} — webhook: ${options.webhookUrl}`);
 
   const balance = await market.getBalance();
   log(`Balance: ${balance.balance} credits`);
-  notify(options.notify ?? options.notifyCmd, 'worker.started', `Worker started! Subscribed to: ${options.categories.join(', ')}. Balance: ${balance.balance} credits.`);
+  notify(options.notify ?? options.notifyCmd, 'worker.started', `Worker started! Subscribed to: ${options.categories.length === 0 ? 'ALL categories' : options.categories.join(', ')}. Balance: ${balance.balance} credits.`);
 
   // ─── Task Processing ───
 
@@ -318,7 +318,7 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
   const child = fork(process.argv[1], [
     'worker', 'run',
     '--agent', options.agentCommand,
-    '--categories', options.categories.join(','),
+    ...(options.categories.length > 0 ? ['--categories', options.categories.join(',')] : []),
     '--port', String(options.port),
     '--webhook-url', options.webhookUrl,
     '--concurrency', String(options.concurrency),
