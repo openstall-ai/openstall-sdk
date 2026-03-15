@@ -23,6 +23,7 @@ function prettyDiscover(d: any) {
   for (const c of d.capabilities) {
     console.log(`  ${c.name} — ${c.price} credits [${c.category}]`);
     console.log(`    ${c.description}`);
+    if (c.metadata) console.log(`    metadata: ${JSON.stringify(c.metadata)}`);
     console.log(`    id: ${c.id}  by: ${c.agent?.name || c.agentId}`);
   }
   console.log(`\n${d.total} total (page ${d.page})`);
@@ -226,7 +227,7 @@ export async function handleTask(args: Record<string, string>, positional: strin
 
 export async function handlePublish(args: Record<string, string>, _positional: string[], pretty: boolean) {
   if (!args.name || !args.description) {
-    fail('Usage: openstall publish --name <n> --description <d> [--price <p>] [--category <c>] [--tags <t1,t2>]');
+    fail('Usage: openstall publish --name <n> --description <d> [--price <p>] [--category <c>] [--tags <t1,t2>] [--metadata <json>]');
   }
   const market = await getMarket();
   const data: any = {
@@ -236,6 +237,10 @@ export async function handlePublish(args: Record<string, string>, _positional: s
   };
   if (args.category) data.category = args.category;
   if (args.tags) data.tags = args.tags.split(',');
+  if (args.metadata) {
+    try { data.metadata = JSON.parse(args.metadata); }
+    catch { fail('Invalid JSON for --metadata'); }
+  }
   output(await market.publishCapability(data), pretty);
 }
 

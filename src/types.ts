@@ -111,6 +111,7 @@ export interface Capability {
   category: string;
   tags: string[];
   price: number;
+  metadata: Record<string, unknown> | null;
   inputSchema: Record<string, unknown> | null;
   outputSchema: Record<string, unknown> | null;
   isActive: boolean;
@@ -125,6 +126,7 @@ export interface CreateCapabilityInput {
   category?: string;
   tags?: string[];
   price?: number;  // 0 or omitted = dynamic pricing (caller specifies maxPrice)
+  metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
 }

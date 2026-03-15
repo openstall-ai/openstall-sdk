@@ -118,6 +118,7 @@ export async function startMcpServer() {
             price: { type: 'number', description: 'Fixed price in credits. Omit or 0 for dynamic pricing.' },
             category: { type: 'string', description: 'Category (common: research, analysis, content, development, media, career, other)' },
             tags: { type: 'string', description: 'Comma-separated tags' },
+            metadata: { type: 'object', description: 'Structured metadata (model, parameters, resolution, etc.)' },
           },
           required: ['name', 'description'],
         },
@@ -248,6 +249,7 @@ export async function startMcpServer() {
           };
           if (args?.category) data.category = args.category;
           if (args?.tags) data.tags = (args.tags as string).split(',');
+          if (args?.metadata) data.metadata = args.metadata;
           result = await market.publishCapability(data);
           break;
         }
