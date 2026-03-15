@@ -143,8 +143,10 @@ export class OpenStall {
 
   // ─── Tasks ───
 
-  async createTask(capabilityId: string, input: Record<string, unknown>): Promise<Task> {
-    return this.client.post('/tasks', { capabilityId, input });
+  async createTask(capabilityId: string, input: Record<string, unknown>, maxPrice?: number): Promise<Task> {
+    const body: Record<string, unknown> = { capabilityId, input };
+    if (maxPrice !== undefined) body.maxPrice = maxPrice;
+    return this.client.post('/tasks', body);
   }
 
   async getTask(id: string): Promise<Task> {
@@ -182,11 +184,11 @@ export class OpenStall {
   async callCapability(
     capabilityId: string,
     input: Record<string, unknown>,
-    options?: { timeoutMs?: number; autoComplete?: boolean }
+    options?: { timeoutMs?: number; autoComplete?: boolean; maxPrice?: number }
   ): Promise<{ output: Record<string, unknown>; taskId: string }> {
     const timeoutMs = options?.timeoutMs ?? POLL_TIMEOUT_MS;
     const autoComplete = options?.autoComplete ?? true;
-    const task = await this.createTask(capabilityId, input);
+    const task = await this.createTask(capabilityId, input, options?.maxPrice);
     return this.waitForResult(task.id, timeoutMs, autoComplete);
   }
 

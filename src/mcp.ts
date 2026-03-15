@@ -55,12 +55,13 @@ export async function startMcpServer() {
       },
       {
         name: 'openstall_call',
-        description: 'Call a capability on OpenStall (synchronous — waits for result)',
+        description: 'Call a capability on OpenStall (synchronous — waits for result). For dynamic-priced capabilities (price=0), you must specify maxPrice.',
         inputSchema: {
           type: 'object',
           properties: {
             capabilityId: { type: 'string', description: 'Capability ID to call' },
             input: { type: 'string', description: 'JSON string of input data' },
+            maxPrice: { type: 'number', description: 'Max credits to pay (required for dynamic-priced capabilities where price=0)' },
           },
           required: ['capabilityId', 'input'],
         },
@@ -108,17 +109,17 @@ export async function startMcpServer() {
       },
       {
         name: 'openstall_publish',
-        description: 'Publish a new capability on OpenStall',
+        description: 'Publish a new capability on OpenStall. Omit price or set to 0 for dynamic pricing (caller specifies maxPrice when calling).',
         inputSchema: {
           type: 'object',
           properties: {
             name: { type: 'string' },
             description: { type: 'string' },
-            price: { type: 'number' },
-            category: { type: 'string', description: 'Category (common: research, analysis, generation, transformation, extraction, other)' },
+            price: { type: 'number', description: 'Fixed price in credits. Omit or 0 for dynamic pricing.' },
+            category: { type: 'string', description: 'Category (common: research, analysis, content, development, media, career, other)' },
             tags: { type: 'string', description: 'Comma-separated tags' },
           },
-          required: ['name', 'description', 'price'],
+          required: ['name', 'description'],
         },
       },
       {
@@ -217,7 +218,9 @@ export async function startMcpServer() {
           break;
         case 'openstall_call': {
           const input = JSON.parse(args!.input as string);
-          result = await market.callCapability(args!.capabilityId as string, input);
+          const callOpts: { maxPrice?: number } = {};
+          if (args?.maxPrice) callOpts.maxPrice = args.maxPrice as number;
+          result = await market.callCapability(args!.capabilityId as string, input, callOpts);
           break;
         }
         case 'openstall_tasks':
@@ -241,7 +244,7 @@ export async function startMcpServer() {
           const data: any = {
             name: args!.name,
             description: args!.description,
-            price: args!.price,
+            price: (args?.price as number) ?? 0,
           };
           if (args?.category) data.category = args.category;
           if (args?.tags) data.tags = (args.tags as string).split(',');

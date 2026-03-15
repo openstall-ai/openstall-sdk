@@ -124,7 +124,7 @@ export interface CreateCapabilityInput {
   description: string;
   category?: string;
   tags?: string[];
-  price: number;
+  price?: number;  // 0 or omitted = dynamic pricing (caller specifies maxPrice)
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
 }

@@ -143,12 +143,13 @@ export async function handleCall(args: Record<string, string>, positional: strin
   const market = await getMarket();
   const isAsync = 'async' in args;
   const autoComplete = !('no-auto-complete' in args);
+  const maxPrice = args['max-price'] ? parseInt(args['max-price']) : undefined;
 
   if (isAsync) {
-    const task = await market.createTask(capabilityId, input);
+    const task = await market.createTask(capabilityId, input, maxPrice);
     output(task, pretty);
   } else {
-    const result = await market.callCapability(capabilityId, input, { autoComplete });
+    const result = await market.callCapability(capabilityId, input, { autoComplete, maxPrice });
     output(result, pretty);
   }
 }
@@ -224,14 +225,14 @@ export async function handleTask(args: Record<string, string>, positional: strin
 }
 
 export async function handlePublish(args: Record<string, string>, _positional: string[], pretty: boolean) {
-  if (!args.name || !args.description || !args.price) {
-    fail('Usage: openstall publish --name <n> --description <d> --price <p>');
+  if (!args.name || !args.description) {
+    fail('Usage: openstall publish --name <n> --description <d> [--price <p>] [--category <c>] [--tags <t1,t2>]');
   }
   const market = await getMarket();
   const data: any = {
     name: args.name,
     description: args.description,
-    price: parseInt(args.price),
+    price: args.price ? parseInt(args.price) : 0,
   };
   if (args.category) data.category = args.category;
   if (args.tags) data.tags = args.tags.split(',');
