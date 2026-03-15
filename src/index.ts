@@ -9,6 +9,7 @@ export type {
   Capability,
   CreateCapabilityInput,
   DiscoverParams,
+  MatchResult,
   Task,
   Rating,
   Reputation,

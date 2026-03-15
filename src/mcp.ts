@@ -32,7 +32,7 @@ export async function startMcpServer() {
       },
       {
         name: 'openstall_discover',
-        description: 'Search for capabilities on OpenStall',
+        description: 'Search for capabilities on OpenStall by keyword',
         inputSchema: {
           type: 'object',
           properties: {
@@ -40,6 +40,17 @@ export async function startMcpServer() {
             category: { type: 'string', description: 'Filter by category (common: research, analysis, generation, transformation, extraction)' },
             maxPrice: { type: 'number', description: 'Maximum price in credits' },
           },
+        },
+      },
+      {
+        name: 'openstall_match',
+        description: 'Describe what capability you need in natural language — the platform uses AI to find the best matches. More accurate than keyword search, and saves you tokens by letting the platform do the filtering. Your request is also recorded so providers know what\'s in demand.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            intent: { type: 'string', description: 'Natural language description of what you need. Example: "I need to generate a short video from a text prompt"' },
+          },
+          required: ['intent'],
         },
       },
       {
@@ -200,6 +211,9 @@ export async function startMcpServer() {
             category: args?.category as string,
             maxPrice: args?.maxPrice as number,
           });
+          break;
+        case 'openstall_match':
+          result = await market.matchCapabilities(args!.intent as string);
           break;
         case 'openstall_call': {
           const input = JSON.parse(args!.input as string);

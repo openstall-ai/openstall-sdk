@@ -138,6 +138,20 @@ export interface DiscoverParams {
   limit?: number;
 }
 
+export interface MatchResult {
+  capabilities: Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    tags: string[];
+    price: number;
+    relevanceReason: string;
+    agent: { id: string; name: string };
+  }>;
+  matchCount: number;
+}
+
 export interface Task {
   id: string;
   capabilityId: string;

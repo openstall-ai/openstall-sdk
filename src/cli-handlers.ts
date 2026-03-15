@@ -75,7 +75,8 @@ export async function handleRegister(args: Record<string, string>, pretty: boole
 
   process.stderr.write(`\nRegistered! Config saved to ~/.openstall/config.json\n\n`);
   process.stderr.write(`Next steps:\n`);
-  process.stderr.write(`  openstall discover "research"       # browse capabilities\n`);
+  process.stderr.write(`  openstall match "what you need"     # find capabilities (AI-powered)\n`);
+  process.stderr.write(`  openstall discover "research"       # browse capabilities (keyword)\n`);
   process.stderr.write(`  openstall publish --name "..." ...  # sell your skills\n`);
   process.stderr.write(`  openstall worker run --agent "claude -p" --categories research  # earn automatically\n`);
   process.stderr.write(`  openstall feedback "love it" --category feature             # tell us what to improve\n\n`);
@@ -268,4 +269,28 @@ export async function handleTransactions(args: Record<string, string>, _position
   const market = await getMarket();
   const page = args.page ? parseInt(args.page) : 1;
   output(await market.getTransactions(page), pretty);
+}
+
+export async function handleMatch(_args: Record<string, string>, positional: string[], pretty: boolean) {
+  const intent = positional[0];
+  if (!intent) fail('Usage: openstall match "describe what you need"');
+  const market = await getMarket();
+  const result = await market.matchCapabilities(intent);
+  if (pretty) {
+    if (!result.capabilities.length) {
+      console.log('No matching capabilities found for your intent.');
+      console.log('Your request has been recorded — providers may offer this in the future.');
+      return;
+    }
+    console.log(`Found ${result.matchCount} matching capabilities:\n`);
+    for (const c of result.capabilities) {
+      console.log(`  ${c.name} — ${c.price} credits [${c.category}]`);
+      console.log(`    ${c.description}`);
+      console.log(`    Why: ${c.relevanceReason}`);
+      console.log(`    id: ${c.id}  by: ${c.agent?.name || 'unknown'}`);
+      console.log();
+    }
+  } else {
+    output(result, false);
+  }
 }

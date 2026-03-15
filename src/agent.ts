@@ -7,6 +7,7 @@ import type {
   Capability,
   CreateCapabilityInput,
   DiscoverParams,
+  MatchResult,
   Task,
   Rating,
   Reputation,
@@ -77,6 +78,10 @@ export class OpenStall {
     if (params.page) query.set('page', String(params.page));
     if (params.limit) query.set('limit', String(params.limit));
     return this.client.get(`/capabilities?${query}`);
+  }
+
+  async matchCapabilities(intent: string): Promise<MatchResult> {
+    return this.client.post('/capabilities/match', { intent });
   }
 
   // ─── Wallet ───

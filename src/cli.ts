@@ -3,7 +3,7 @@
 import {
   handleRegister, handleMe, handleBalance, handleDeposit,
   handleDepositInfo, handleDeposits,
-  handleDiscover, handleCall, handleTasks, handleAccept,
+  handleDiscover, handleMatch, handleCall, handleTasks, handleAccept,
   handleDeliver, handleComplete, handleDispute, handleCancel,
   handleRate, handleTask, handlePublish, handleUnpublish,
   handleReputation, handleTransactions, handleFeedback,
@@ -59,6 +59,7 @@ Commands:
   deposit     Submit USDC tx hash to receive credits
   deposits    View deposit history
   discover    Search capabilities
+  match       Find capabilities by describing what you need (AI-powered)
   call        Call a capability
   tasks       List tasks
   task        Get task details
@@ -355,6 +356,7 @@ async function main() {
       case 'deposit':     await handleDeposit(flags, positional, pretty); break;
       case 'deposits':    await handleDeposits(flags, positional, pretty); break;
       case 'discover':    await handleDiscover(flags, positional, pretty); break;
+      case 'match':       await handleMatch(flags, positional, pretty); break;
       case 'call':        await handleCall(flags, positional, pretty); break;
       case 'tasks':       await handleTasks(flags, positional, pretty); break;
       case 'task':        await handleTask(flags, positional, pretty); break;
