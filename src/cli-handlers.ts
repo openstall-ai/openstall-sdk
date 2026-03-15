@@ -1,3 +1,5 @@
+import { readFile } from 'fs/promises';
+import { basename } from 'path';
 import { OpenStall } from './agent.js';
 import { loadConfig, saveConfig } from './cli-config.js';
 
@@ -298,5 +300,78 @@ export async function handleMatch(_args: Record<string, string>, positional: str
     }
   } else {
     output(result, false);
+  }
+}
+
+export async function handleUpload(args: Record<string, string>, positional: string[], pretty: boolean) {
+  const filePath = positional[0];
+  if (!filePath) fail('Usage: openstall upload <filepath> [--filename name]');
+  const config = await loadConfig();
+  if (!config) fail('Not configured. Run: openstall register --name <name>');
+  const { HttpClient } = await import('./client.js');
+  const client = new HttpClient(config!.baseUrl || DEFAULT_BASE_URL, config!.apiKey);
+
+  const buffer = await readFile(filePath);
+  const filename = args.filename || basename(filePath);
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const mimeTypes: Record<string, string> = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    json: 'application/json', csv: 'text/csv', txt: 'text/plain',
+    zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip',
+    mp3: 'audio/mpeg', mp4: 'video/mp4', wav: 'audio/wav',
+  };
+  const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+  const result = await client.upload<any>('/files/upload', buffer, filename, contentType);
+
+  if (pretty) {
+    const sizeMB = (result.size / (1024 * 1024)).toFixed(2);
+    console.log(`Uploaded: ${result.filename} (${sizeMB} MB)`);
+    console.log(`URL: ${result.url}`);
+    console.log(`ID: ${result.id}`);
+    console.log(`Expires: ${result.expiresAt}`);
+    console.log(`\nUse this URL in task input:`);
+    console.log(`  openstall call <capId> --input '{"fileUrl": "${result.url}"}'`);
+  } else {
+    output(result, false);
+  }
+}
+
+export async function handleFiles(_args: Record<string, string>, _positional: string[], pretty: boolean) {
+  const config = await loadConfig();
+  if (!config) fail('Not configured. Run: openstall register --name <name>');
+  const { HttpClient } = await import('./client.js');
+  const client = new HttpClient(config!.baseUrl || DEFAULT_BASE_URL, config!.apiKey);
+  const result = await client.get<any>('/files');
+
+  if (pretty) {
+    if (!result.files.length) {
+      console.log('No files uploaded yet.');
+      return;
+    }
+    console.log(`${result.total} files:\n`);
+    for (const f of result.files) {
+      const sizeMB = (f.size / (1024 * 1024)).toFixed(2);
+      console.log(`  ${f.filename} (${sizeMB} MB) — ${f.id}`);
+      console.log(`    Uploaded: ${f.createdAt}  Expires: ${f.expiresAt}`);
+    }
+  } else {
+    output(result, false);
+  }
+}
+
+export async function handleDeleteFile(_args: Record<string, string>, positional: string[], pretty: boolean) {
+  const fileId = positional[0];
+  if (!fileId) fail('Usage: openstall delete-file <fileId>');
+  const config = await loadConfig();
+  if (!config) fail('Not configured. Run: openstall register --name <name>');
+  const { HttpClient } = await import('./client.js');
+  const client = new HttpClient(config!.baseUrl || DEFAULT_BASE_URL, config!.apiKey);
+  await client.delete(`/files/${fileId}`);
+  if (pretty) {
+    console.log(`Deleted: ${fileId}`);
+  } else {
+    output({ deleted: true, id: fileId }, false);
   }
 }

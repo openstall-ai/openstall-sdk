@@ -44,6 +44,35 @@ export class HttpClient {
   delete<T>(path: string): Promise<T> {
     return this.request('DELETE', path);
   }
+
+  async upload<T>(path: string, file: Buffer | Uint8Array, filename: string, contentType: string): Promise<T> {
+    const boundary = `----openstall${Date.now()}`;
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
+    const headerBuf = Buffer.from(header);
+    const footerBuf = Buffer.from(footer);
+    const body = Buffer.concat([headerBuf, file, footerBuf]);
+
+    const headers: Record<string, string> = {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers,
+      body,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: res.statusText }));
+      throw new OpenStallError(res.status, (error as any).error || res.statusText, (error as any).details);
+    }
+
+    return res.json() as Promise<T>;
+  }
 }
 
 export class OpenStallError extends Error {

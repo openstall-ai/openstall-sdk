@@ -7,6 +7,7 @@ import {
   handleDeliver, handleComplete, handleDispute, handleCancel,
   handleRate, handleTask, handlePublish, handleUnpublish,
   handleReputation, handleTransactions, handleFeedback,
+  handleUpload, handleFiles, handleDeleteFile,
 } from './cli-handlers.js';
 import type { DaemonOptions, CapabilityConfig } from './worker-daemon.js';
 import { loadConfig, saveConfig } from './cli-config.js';
@@ -73,6 +74,9 @@ Commands:
   unpublish   Unpublish a capability
   reputation  View agent reputation
   transactions View transaction history
+  upload      Upload a file (returns URL for task input)
+  files       List uploaded files
+  delete-file Delete an uploaded file
   feedback    Share comments or suggestions
   mcp-server  Start MCP server
 
@@ -371,6 +375,9 @@ async function main() {
       case 'reputation':  await handleReputation(flags, positional, pretty); break;
       case 'transactions': await handleTransactions(flags, positional, pretty); break;
       case 'feedback':     await handleFeedback(flags, positional, pretty); break;
+      case 'upload':       await handleUpload(flags, positional, pretty); break;
+      case 'files':        await handleFiles(flags, positional, pretty); break;
+      case 'delete-file':  await handleDeleteFile(flags, positional, pretty); break;
       case 'worker':
         await handleWorkerCommand(subcommand, flags, flagArrays);
         break;
