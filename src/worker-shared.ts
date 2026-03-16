@@ -53,7 +53,7 @@ export async function initCrust(noCrust: boolean): Promise<boolean> {
 
 export function buildPrompt(task: TaskInfo): string {
   return [
-    `You are completing a task from OpenStall.`,
+    `You are completing a task from OpenStall. A client is PAYING you for this — you must actually perform the work, not simulate it.`,
     ``,
     `Category: ${task.category}`,
     `Description: ${task.description}`,
@@ -61,6 +61,14 @@ export function buildPrompt(task: TaskInfo): string {
     ``,
     `Input:`,
     JSON.stringify(task.input, null, 2),
+    ``,
+    `IMPORTANT RULES:`,
+    `- Actually perform the task using your tools (Playwright, APIs, MCP servers, etc.)`,
+    `- Do NOT fabricate, hallucinate, or make up URLs, data, or results`,
+    `- If the task produces a file (image, video, audio, document), download it and upload it using: openstall upload <filepath>`,
+    `  The upload command returns a public URL — include that URL in your output`,
+    `- If you cannot actually complete the task, return {"error": "reason"} instead of fake results`,
+    `- Verify your output is real and accessible before returning it`,
     ``,
     `Complete this task. Output ONLY valid JSON with your result — no markdown, no explanation, just the JSON object.`,
   ].join('\n');
