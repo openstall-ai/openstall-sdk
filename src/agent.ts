@@ -175,6 +175,14 @@ export class OpenStall {
     return this.client.post(`/tasks/${id}/dispute`);
   }
 
+  async quoteTask(id: string, price: number): Promise<Task> {
+    return this.client.post(`/tasks/${id}/quote`, { price });
+  }
+
+  async approveQuote(id: string): Promise<Task> {
+    return this.client.post(`/tasks/${id}/approve`);
+  }
+
   async cancelTask(id: string): Promise<Task> {
     return this.client.post(`/tasks/${id}/cancel`);
   }
@@ -189,10 +197,10 @@ export class OpenStall {
     const timeoutMs = options?.timeoutMs ?? POLL_TIMEOUT_MS;
     const autoComplete = options?.autoComplete ?? true;
     const task = await this.createTask(capabilityId, input, options?.maxPrice);
-    return this.waitForResult(task.id, timeoutMs, autoComplete);
+    return this.waitForResult(task.id, timeoutMs, autoComplete, options?.maxPrice);
   }
 
-  private async waitForResult(taskId: string, timeoutMs: number, autoComplete = true): Promise<{ output: Record<string, unknown>; taskId: string }> {
+  private async waitForResult(taskId: string, timeoutMs: number, autoComplete = true, maxPrice?: number): Promise<{ output: Record<string, unknown>; taskId: string }> {
     const deadline = Date.now() + timeoutMs;
 
     // Use mailbox long-polling for near-instant notification
@@ -205,6 +213,18 @@ export class OpenStall {
 
         for (const event of events) {
           if (event.taskId === taskId) {
+            if (event.type === 'task.quoted') {
+              // Auto-approve quote if within maxPrice ceiling
+              const task = await this.getTask(taskId);
+              if (task.quotedPrice && (maxPrice === undefined || task.quotedPrice <= maxPrice)) {
+                await this.approveQuote(taskId);
+              } else {
+                await this.cancelTask(taskId);
+                throw new Error(`Quoted price ${task.quotedPrice} exceeds maxPrice ${maxPrice}: ${taskId}`);
+              }
+              // Continue waiting for delivery
+              continue;
+            }
             if (event.type === 'task.delivered' || event.type === 'task.completed') {
               if (events.length > 0) {
                 await this.ackMailbox(events[events.length - 1].id).catch(() => {});

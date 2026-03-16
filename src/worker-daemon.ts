@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fork } from 'node:child_process';
 import { OpenStall } from './agent.js';
 import { loadConfig, type NotifyConfig } from './cli-config.js';
-import { log, logError, buildPrompt, buildDecisionPrompt, execAgent, execAgentDecision, initCrust, notify, type TaskInfo } from './worker-shared.js';
+import { log, logError, buildPrompt, buildDecisionPrompt, buildQuotingPrompt, execAgent, execAgentDecision, initCrust, notify, type TaskInfo } from './worker-shared.js';
 
 const STATE_DIR = join(homedir(), '.openstall');
 const PID_FILE = join(STATE_DIR, 'worker.pid');
@@ -120,6 +120,89 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
     }
   }
 
+  async function processQuoteRequest(taskId: string): Promise<void> {
+    try {
+      const task = await market.getTask(taskId);
+      if (task.status !== 'open') {
+        log(`Skipping quote ${taskId}: already ${task.status}`);
+        return;
+      }
+      const taskInfo: TaskInfo = {
+        id: task.id,
+        category: task.category ?? 'unknown',
+        description: task.description ?? '',
+        input: task.input,
+        maxPrice: task.maxPrice ?? 0,
+      };
+      log(`Evaluating quote for ${taskId}...`);
+      const decision = await execAgentDecision(
+        options.agentCommand,
+        buildQuotingPrompt(taskInfo),
+        useCrust,
+      );
+      if (!decision.accept || !(decision as any).price) {
+        log(`Declined quote ${taskId}: ${decision.reason}`);
+        notify(options.notify ?? options.notifyCmd, 'task.rejected',
+          `Quote declined: ${decision.reason.slice(0, 120)} (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
+        return;
+      }
+      const price = (decision as any).price as number;
+      log(`Submitting quote for ${taskId}: ${price} credits`);
+      await market.quoteTask(task.id, price);
+      notify(options.notify ?? options.notifyCmd, 'task.quoted',
+        `Quote submitted: ${price} credits (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
+    } catch (err: any) {
+      logError(`Quote failed for ${taskId}: ${err.message}`);
+      notify(options.notify ?? options.notifyCmd, 'task.failed', `Quote failed: ${err.message.slice(0, 120)}`);
+    }
+  }
+
+  async function processApprovedTask(taskId: string): Promise<void> {
+    try {
+      const task = await market.getTask(taskId);
+      if (task.status !== 'in_progress') {
+        log(`Skipping approved ${taskId}: already ${task.status}`);
+        return;
+      }
+      const taskInfo: TaskInfo = {
+        id: task.id,
+        category: task.category ?? 'unknown',
+        description: task.description ?? '',
+        input: task.input,
+        maxPrice: task.quotedPrice ?? task.maxPrice ?? 0,
+      };
+      try {
+        log(`Running agent for approved ${taskId}...`);
+        const output = await execAgent(options.agentCommand, buildPrompt(taskInfo), useCrust);
+        if (output.error && Object.keys(output).length <= 2) {
+          log(`Agent returned error for ${taskId}: ${String(output.error).slice(0, 200)}`);
+          await market.cancelTask(task.id);
+          notify(options.notify ?? options.notifyCmd, 'task.cancelled',
+            `Task cancelled — agent cannot fulfill: ${String(output.error).slice(0, 100)}`);
+          return;
+        }
+        await market.deliverTask(task.id, output);
+        const earned = Math.floor((task.quotedPrice ?? task.maxPrice ?? 0) * 0.95);
+        log(`Delivered ${taskId}! +${earned} credits`);
+        notify(options.notify ?? options.notifyCmd, 'task.completed',
+          `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
+      } catch (execErr: any) {
+        logError(`Execution failed for ${taskId}: ${execErr.message}`);
+        try {
+          await market.cancelTask(task.id);
+          log(`Task ${taskId} cancelled, escrow refunded to buyer`);
+        } catch (cancelErr: any) {
+          logError(`Failed to cancel ${taskId}: ${cancelErr.message}`);
+        }
+        notify(options.notify ?? options.notifyCmd, 'task.failed',
+          `Task failed: ${execErr.message.slice(0, 120)} (task cancelled, buyer refunded)`);
+      }
+    } catch (err: any) {
+      logError(`Approved task failed ${taskId}: ${err.message}`);
+      notify(options.notify ?? options.notifyCmd, 'task.failed', `Task failed: ${err.message.slice(0, 120)}`);
+    }
+  }
+
   async function processTask(item: QueuedTask): Promise<void> {
     try {
       const task = await market.getTask(item.taskId);
@@ -219,7 +302,15 @@ export async function startWorkerDaemon(options: DaemonOptions): Promise<void> {
         const body = await readBody(req);
         const event = JSON.parse(body);
 
-        if (event.event === 'task.available' && event.task?.id) {
+        if (event.event === 'task.quote_requested' && event.taskId) {
+          log(`Webhook: task.quote_requested ${event.taskId}`);
+          activeTasks++;
+          processQuoteRequest(event.taskId).finally(() => { activeTasks--; totalProcessed++; });
+        } else if (event.event === 'task.approved' && event.taskId) {
+          log(`Webhook: task.approved ${event.taskId}`);
+          activeTasks++;
+          processApprovedTask(event.taskId).finally(() => { activeTasks--; totalProcessed++; });
+        } else if (event.event === 'task.available' && event.task?.id) {
           log(`Webhook: task.available ${event.task.id}`);
           queue.push({
             taskId: event.task.id,

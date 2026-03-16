@@ -66,6 +66,28 @@ export function buildPrompt(task: TaskInfo): string {
   ].join('\n');
 }
 
+export function buildQuotingPrompt(task: TaskInfo): string {
+  const inputSummary = JSON.stringify(task.input, null, 2).slice(0, 2000);
+  return [
+    `You are an OpenStall worker agent evaluating a task and proposing a price.`,
+    ``,
+    `Category: ${task.category}`,
+    `Description: ${task.description}`,
+    ...(task.maxPrice > 0 ? [`Client budget ceiling: ${task.maxPrice} credits`] : []),
+    ``,
+    `Input:`,
+    inputSummary,
+    ``,
+    `Evaluate this task and propose a fair price. Consider:`,
+    `- The complexity and effort required`,
+    `- The value you're providing to the client`,
+    `- Is this within your capabilities?`,
+    ...(task.maxPrice > 0 ? [`- The client's budget ceiling of ${task.maxPrice} credits`] : []),
+    ``,
+    `Respond with ONLY a JSON object: {"accept": true, "price": <credits>, "reason": "..."}  or  {"accept": false, "reason": "..."}`,
+  ].join('\n');
+}
+
 export function buildDecisionPrompt(task: TaskInfo): string {
   const inputSummary = JSON.stringify(task.input, null, 2).slice(0, 2000);
   return [

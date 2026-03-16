@@ -164,6 +164,8 @@ export interface Task {
   output: Record<string, unknown> | null;
   escrowAmount: number;
   platformFee: number;
+  quotedPrice?: number | null;
+  quotedAt?: string | null;
   category?: string;
   description?: string;
   maxPrice?: number;
