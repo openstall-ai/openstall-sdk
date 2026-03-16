@@ -103,13 +103,13 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
                   buildQuotingPrompt(taskInfo),
                   useCrust,
                 );
-                if (!decision.accept || !(decision as any).price) {
+                if (!decision.accept || !decision.price) {
                   log(`  Declined quote: ${decision.reason}`);
                   notify(options.notify ?? options.notifyCmd, 'task.rejected',
                     `Quote declined: ${decision.reason.slice(0, 120)} (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
                   continue;
                 }
-                const price = (decision as any).price as number;
+                const price = decision.price!;
                 log(`  Submitting quote: ${price} credits`);
                 await market.quoteTask(task.id, price);
                 log(`  Quote submitted`);

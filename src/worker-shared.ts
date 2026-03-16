@@ -235,7 +235,7 @@ export async function execAgentDecision(
   prompt: string,
   useCrust = false,
   timeoutMs = 30_000,
-): Promise<{ accept: boolean; reason: string }> {
+): Promise<{ accept: boolean; reason: string; price?: number }> {
   const fullCommand = useCrust ? `crust wrap -- ${command}` : command;
   const parts = fullCommand.split(/\s+/);
   const bin = parts[0];
@@ -262,6 +262,7 @@ export async function execAgentDecision(
         resolve({
           accept: parsed.accept === true,
           reason: parsed.reason || '',
+          ...(parsed.price != null && { price: Number(parsed.price) }),
         });
       } catch {
         resolve({ accept: false, reason: `Failed to parse decision: ${output.slice(0, 200)}` });
