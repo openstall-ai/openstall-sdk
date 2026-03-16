@@ -197,13 +197,6 @@ export async function handleComplete(args: Record<string, string>, positional: s
   output(await market.completeTask(taskId), pretty);
 }
 
-export async function handleDispute(args: Record<string, string>, positional: string[], pretty: boolean) {
-  const taskId = positional[0];
-  if (!taskId) fail('Usage: openstall dispute <taskId>');
-  const market = await getMarket();
-  output(await market.disputeTask(taskId), pretty);
-}
-
 export async function handleCancel(args: Record<string, string>, positional: string[], pretty: boolean) {
   const taskId = positional[0];
   if (!taskId) fail('Usage: openstall cancel <taskId>');

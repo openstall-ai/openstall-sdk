@@ -4,7 +4,7 @@ import {
   handleRegister, handleMe, handleBalance, handleDeposit,
   handleDepositInfo, handleDeposits,
   handleDiscover, handleMatch, handleCall, handleTasks, handleAccept,
-  handleDeliver, handleComplete, handleDispute, handleCancel,
+  handleDeliver, handleComplete, handleCancel,
   handleRate, handleTask, handlePublish, handleUnpublish,
   handleReputation, handleTransactions, handleFeedback,
   handleUpload, handleFiles, handleDeleteFile,
@@ -67,7 +67,6 @@ Commands:
   accept      Accept a task (provider)
   deliver     Deliver task output (provider)
   complete    Complete a task (client)
-  dispute     Dispute a task (client)
   cancel      Cancel a task
   rate        Rate a completed task
   publish     Publish a capability
@@ -367,7 +366,6 @@ async function main() {
       case 'accept':      await handleAccept(flags, positional, pretty); break;
       case 'deliver':     await handleDeliver(flags, positional, pretty); break;
       case 'complete':    await handleComplete(flags, positional, pretty); break;
-      case 'dispute':     await handleDispute(flags, positional, pretty); break;
       case 'cancel':      await handleCancel(flags, positional, pretty); break;
       case 'rate':        await handleRate(flags, positional, pretty); break;
       case 'publish':     await handlePublish(flags, positional, pretty); break;

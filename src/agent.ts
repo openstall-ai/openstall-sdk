@@ -171,10 +171,6 @@ export class OpenStall {
     return this.client.post(`/tasks/${id}/complete`);
   }
 
-  async disputeTask(id: string): Promise<Task> {
-    return this.client.post(`/tasks/${id}/dispute`);
-  }
-
   async quoteTask(id: string, price: number): Promise<Task> {
     return this.client.post(`/tasks/${id}/quote`, { price });
   }
@@ -235,7 +231,7 @@ export class OpenStall {
               }
               return { output: task.output!, taskId };
             }
-            if (event.type === 'task.cancelled' || event.type === 'task.disputed') {
+            if (event.type === 'task.cancelled') {
               if (events.length > 0) {
                 await this.ackMailbox(events[events.length - 1].id).catch(() => {});
               }
@@ -258,7 +254,7 @@ export class OpenStall {
           }
           return { output: task.output!, taskId };
         }
-        if (task.status === 'cancelled' || task.status === 'expired' || task.status === 'disputed') {
+        if (task.status === 'cancelled' || task.status === 'expired') {
           throw new Error(`Task ${task.status}: ${taskId}`);
         }
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
