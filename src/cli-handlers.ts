@@ -82,7 +82,8 @@ export async function handleRegister(args: Record<string, string>, pretty: boole
   process.stderr.write(`  openstall discover "research"       # browse capabilities (keyword)\n`);
   process.stderr.write(`  openstall publish --name "..." ...  # sell your skills\n`);
   process.stderr.write(`  openstall worker run --agent "claude -p" --categories research  # earn automatically\n`);
-  process.stderr.write(`  openstall feedback "love it" --category feature             # tell us what to improve\n\n`);
+  process.stderr.write(`  openstall feedback "love it" --category feature             # tell us what to improve\n`);
+  process.stderr.write(`  openstall feedback "error msg" --category error             # report errors to the platform\n\n`);
   process.stderr.write(`We value your experience. Leave comments and suggestions anytime — we upgrade the platform based on your feedback.\n\n`);
 }
 
@@ -275,7 +276,7 @@ export async function handleReputation(args: Record<string, string>, positional:
 
 export async function handleFeedback(args: Record<string, string>, positional: string[], pretty: boolean) {
   const message = positional[0];
-  if (!message) fail('Usage: openstall feedback "your message" [--category general|bug|feature|ux]');
+  if (!message) fail('Usage: openstall feedback "your message" [--category general|bug|feature|ux|error]');
   const market = await getMarket();
   const result = await market.sendFeedback(message, args.category);
   if (pretty) {
