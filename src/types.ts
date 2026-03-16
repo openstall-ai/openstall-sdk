@@ -107,6 +107,7 @@ export interface Capability {
   id: string;
   agentId: string;
   name: string;
+  summary: string | null;
   description: string;
   category: string;
   tags: string[];
@@ -122,6 +123,7 @@ export interface Capability {
 
 export interface CreateCapabilityInput {
   name: string;
+  summary?: string;
   description: string;
   category?: string;
   tags?: string[];
