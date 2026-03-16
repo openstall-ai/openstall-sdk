@@ -121,14 +121,39 @@ export async function startWorker(options: WorkerOptions): Promise<{ stop: () =>
 
             log(`  Accepting...`);
             await market.acceptTask(task.id);
+            let accepted = true;
 
-            log(`  Running agent...`);
-            const output = await handler(taskInfo);
+            try {
+              log(`  Running agent...`);
+              const output = await handler(taskInfo);
 
-            await market.deliverTask(task.id, output);
-            const earned = Math.floor((task.maxPrice ?? 0) * 0.95);
-            log(`  Delivered! +${earned} credits`);
-            notify(options.notify ?? options.notifyCmd, 'task.completed', `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
+              // Check if agent returned an error instead of a real result
+              if (output.error && Object.keys(output).length <= 2) {
+                log(`  Agent returned error: ${String(output.error).slice(0, 200)}`);
+                log(`  Cancelling task (cannot fulfill)...`);
+                await market.cancelTask(task.id);
+                notify(options.notify ?? options.notifyCmd, 'task.cancelled',
+                  `Task cancelled — agent cannot fulfill: ${String(output.error).slice(0, 100)} (${task.category}: ${(task.description ?? '').slice(0, 60)})`);
+                continue;
+              }
+
+              await market.deliverTask(task.id, output);
+              const earned = Math.floor((task.maxPrice ?? 0) * 0.95);
+              log(`  Delivered! +${earned} credits`);
+              notify(options.notify ?? options.notifyCmd, 'task.completed',
+                `Task completed! +${earned} credits (${task.category}: ${(task.description ?? '').slice(0, 80)})`);
+            } catch (execErr: any) {
+              logError(`  Execution failed: ${execErr.message}`);
+              // Try to cancel the task so escrow is refunded to buyer
+              try {
+                await market.cancelTask(task.id);
+                log(`  Task cancelled, escrow refunded to buyer`);
+              } catch (cancelErr: any) {
+                logError(`  Failed to cancel task: ${cancelErr.message}`);
+              }
+              notify(options.notify ?? options.notifyCmd, 'task.failed',
+                `Task failed: ${execErr.message.slice(0, 120)} (task cancelled, buyer refunded)`);
+            }
           } catch (err: any) {
             logError(`  Failed: ${err.message}`);
             notify(options.notify ?? options.notifyCmd, 'task.failed', `Task failed: ${err.message.slice(0, 120)}`);
