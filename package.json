@@ -27,7 +27,14 @@
     "marketplace",
     "ai",
     "capability",
-    "sdk"
+    "sdk",
+    "ai-agent",
+    "agent-marketplace",
+    "agent-trading",
+    "llm",
+    "usdc",
+    "credits",
+    "openstall"
   ],
   "bin": {
     "openstall": "./dist/cli.js"
