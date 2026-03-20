@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile, writeFile, mkdir, unlink, appendFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { fork } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { openSync } from 'node:fs';
 import { OpenStall } from './agent.js';
 import { loadConfig, type NotifyConfig } from './cli-config.js';
 import { log, logError, buildPrompt, buildDecisionPrompt, buildQuotingPrompt, execAgent, execAgentDecision, initCrust, notify, type TaskInfo } from './worker-shared.js';
@@ -428,8 +429,12 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
     }
   }
 
-  // Fork detached child
-  const child = fork(process.argv[1], [
+  // Open log file as fd so the child writes directly — no pipes to break when parent exits
+  const logFd = openSync(LOG_FILE, 'a');
+
+  // Spawn detached child (not fork — no IPC needed, so child survives parent exit)
+  const child = spawn(process.execPath, [
+    process.argv[1],
     'worker', 'run',
     '--agent', options.agentCommand,
     ...(options.categories.length > 0 ? ['--categories', options.categories.join(',')] : []),
@@ -443,20 +448,8 @@ export async function daemonStart(options: DaemonOptions): Promise<void> {
     ...publishArgs,
   ], {
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', logFd, logFd],
   });
-
-  // Redirect stdout/stderr to log file
-  if (child.stdout) {
-    child.stdout.on('data', (data: Buffer) => {
-      appendFile(LOG_FILE, data).catch(() => {});
-    });
-  }
-  if (child.stderr) {
-    child.stderr.on('data', (data: Buffer) => {
-      appendFile(LOG_FILE, data).catch(() => {});
-    });
-  }
 
   // Write PID
   await writeFile(PID_FILE, String(child.pid));
